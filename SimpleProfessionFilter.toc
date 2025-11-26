@@ -1,0 +1,8 @@
+## Interface: 11508
+## Title: |TInterface/Addons/SimpleProfessionFilter/Images/Icon:16:16|t Simple Profession Filter
+## Notes: Minimalist profession filter: Search by name or material,|nSkill up and Have materials.|n|n|cff82c5ffFrom |TInterface/Addons/SimpleProfessionFilter/Images/Ua:12:12|t |cff82c5ffwith love
+## Category: Professions
+## Author: Krev
+## Version: 1.0
+
+SimpleProfessionFilter.lua
