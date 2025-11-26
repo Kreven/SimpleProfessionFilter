@@ -52,7 +52,27 @@ git clone https://github.com/YourUsername/SimpleProfessionFilter.git
 
 ## Screenshots
 
-*Coming soon*
+### Default UI (Blizzard)
+
+![TradeSkill Default](https://i.ibb.co/C535wcKF/Blizz-default.png)
+![Enchanting Default](https://i.ibb.co/j9G1QR6D/Blizz-ench-default.png)
+
+### Search Feature
+
+![Search Filter](https://i.ibb.co/hJtmDt84/Blizz-search.png)
+
+### Filters
+
+![Have Materials Filter](https://i.ibb.co/KpFLqTN2/Blizz-have-mats.png)
+![Skill Up Filter](https://i.ibb.co/FLX5LvHK/Blizz-skill-up.png)
+
+### With Leatrix Plus
+
+![LP Default](https://i.ibb.co/3926cS5b/LP-default.png)
+![LP Enchanting](https://i.ibb.co/wNJKtfXD/LP-ench-default.png)
+![LP Search](https://i.ibb.co/9kzNjk7q/LP-search.png)
+![LP Have Materials](https://i.ibb.co/Q7X1vbNS/LP-have-mats.png)
+![LP Skill Up](https://i.ibb.co/gMqsZpjT/LP-skill-up.png)
 
 ## Compatibility Notes
 
