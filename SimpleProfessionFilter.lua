@@ -1,6 +1,125 @@
 local addonName, SPF = ...
 _G[addonName] = SPF
 
+-- ============================================================================
+-- Constants & Configuration
+-- ============================================================================
+
+local CONSTANTS = {
+    -- UI Positions
+    TRADESKILL_SEARCH_X = 71,
+    TRADESKILL_SEARCH_Y = -55,
+    TRADESKILL_SEARCH_WIDTH = 130,
+    CRAFT_SEARCH_X_NORMAL = 18,
+    CRAFT_SEARCH_X_LEATRIX = 71,
+    CRAFT_SEARCH_Y_NORMAL = -73,
+    CRAFT_SEARCH_Y_LEATRIX = -55,
+    CRAFT_SEARCH_WIDTH = 160,
+    SEARCH_HEIGHT = 18,
+    
+    -- Checkbox
+    CHECKBOX_SIZE = 21,
+    CHECKBOX_SPACING = 38,
+    CHECKBOX_OFFSET = 7,
+    CHECKBOX_HIT_INSET_NORMAL = -50,
+    CHECKBOX_HIT_INSET_LEATRIX = -75,
+    
+    -- RankFrame
+    RANKFRAME_WIDTH_NORMAL = 280,
+    RANKFRAME_WIDTH_LEATRIX = 280,
+    RANKFRAME_HEIGHT = 15,
+    RANKFRAME_OFFSET_Y = -2,
+    
+    -- CraftRankFrame
+    CRAFT_RANKFRAME_WIDTH_NORMAL = 270,
+    CRAFT_RANKFRAME_WIDTH_LEATRIX = 280,
+    CRAFT_RANKFRAME_HEIGHT = 16,
+    CRAFT_RANKFRAME_BORDER_WIDTH_NORMAL = 280,
+    CRAFT_RANKFRAME_BORDER_WIDTH_LEATRIX = 290,
+    CRAFT_RANKFRAME_BORDER_HEIGHT = 38,
+    
+    -- ScrollFrame
+    SCROLL_HIGHLIGHT_WIDTH = 293,
+    SCROLL_HIGHLIGHT_HEIGHT = 316,
+    
+    -- Layout
+    LAYOUT_CONTROLS_Y = -35.5,
+    LAYOUT_RANK_TOP_Y = -16,
+    LAYOUT_RANK_WIDTH = 254,
+    LAYOUT_RANK_HEIGHT = 16,
+    
+    -- Colors
+    COLOR_PLACEHOLDER = {0.5, 0.5, 0.5},
+    COLOR_CLEAR_HOVER = {1, 0.2, 0.2},
+    COLOR_CLEAR_NORMAL = {1, 1, 1},
+    
+    -- Textures
+    TEXTURE_CLEAR_BUTTON = "Interface\\FriendsFrame\\ClearBroadcastIcon",
+    TEXTURE_PLUS_BUTTON = "Interface\\Buttons\\UI-PlusButton-Up",
+    TEXTURE_MINUS_BUTTON = "Interface\\Buttons\\UI-MinusButton-Up",
+    TEXTURE_PLUS_HIGHLIGHT = "Interface\\Buttons\\UI-PlusButton-Hilight",
+    
+    -- Backdrop
+    BACKDROP_BG = "Interface\\ChatFrame\\ChatFrameBackground",
+    BACKDROP_EDGE = "Interface\\Tooltips\\UI-Tooltip-Border",
+    BACKDROP_TILE_SIZE = 16,
+    BACKDROP_EDGE_SIZE = 12,
+    BACKDROP_INSETS = { left = 3, right = 3, top = 3, bottom = 3 },
+    BACKDROP_COLOR = {0, 0, 0, 0.5},
+    BACKDROP_BORDER_COLOR = {0.6, 0.6, 0.6, 1},
+}
+
+-- Difficulty color fallbacks
+local DIFFICULTY_COLORS = {
+    optimal = {r=1.0, g=0.5, b=0.25},
+    medium = {r=1.0, g=1.0, b=0.0},
+    easy = {r=0.25, g=0.75, b=0.25},
+    trivial = {r=0.5, g=0.5, b=0.5},
+    default = {r=1.0, g=1.0, b=1.0}
+}
+
+-- ============================================================================
+-- State Management (Separate states for TradeSkill and Craft)
+-- ============================================================================
+
+SPF.TradeSkillState = {
+    filterText = "",
+    showSkillUp = false,
+    showHaveMats = false
+}
+
+SPF.CraftState = {
+    filterText = "",
+    showSkillUp = false,
+    showHaveMats = false
+}
+
+SPF.skillUpText = "Skill up"
+SPF.tradeSkillHaveMatsText = "Have mats"  -- For TradeSkill (normal professions)
+SPF.craftHaveMatsText = "Have materials"   -- For Craft (Enchanting)
+SPF.searchPlaceholder = "Search..."
+
+-- ============================================================================
+-- Utility Functions
+-- ============================================================================
+
+local stripColorCache = {}
+local function StripColor(text)
+    if not text then return "" end
+    if stripColorCache[text] then return stripColorCache[text] end
+    
+    local stripped = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    stripColorCache[text] = stripped
+    return stripped
+end
+
+local isLeatrixLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded("Leatrix_Plus")) or IsAddOnLoaded("Leatrix_Plus")
+local enhanceProfessions = isLeatrixLoaded and _G.LeaPlusDB and _G.LeaPlusDB["EnhanceProfessions"] == "On"
+
+-- ============================================================================
+-- Event Handler
+-- ============================================================================
+
 SPF.Frame = CreateFrame("Frame")
 SPF.Frame:RegisterEvent("ADDON_LOADED")
 SPF.Frame:RegisterEvent("TRADE_SKILL_SHOW")
@@ -8,21 +127,6 @@ SPF.Frame:RegisterEvent("TRADE_SKILL_UPDATE")
 SPF.Frame:RegisterEvent("CRAFT_SHOW")
 SPF.Frame:RegisterEvent("CRAFT_UPDATE")
 
-SPF.filterText = ""
-SPF.showSkillUp = false
-SPF.showHaveMats = false
-
-SPF.skillUpText = "Skill up"
-SPF.haveMatsText = "Have mats"
-SPF.searchPlaceholder = "Search..."
-
-local function StripColor(text)
-    if not text then return "" end
-    return text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
-end
-
-local isLeatrixLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded("Leatrix_Plus")) or IsAddOnLoaded("Leatrix_Plus")
-local enhanceProfessions =  isLeatrixLoaded and _G.LeaPlusDB and _G.LeaPlusDB["EnhanceProfessions"] == "On"
 
 function SPF.Frame:OnEvent(event, arg1)
     if event == "ADDON_LOADED" then
@@ -32,15 +136,244 @@ function SPF.Frame:OnEvent(event, arg1)
             SPF:InitCraftUI()
         end
     elseif event == "TRADE_SKILL_SHOW" then
-        SPF.filterText = ""
+        SPF.TradeSkillState.filterText = ""
         if SPF.SearchBox then SPF.SearchBox:SetText("") end
+        stripColorCache = {} -- Clear cache on frame show
         SPF:AdjustTradeSkillLayout()
     elseif event == "CRAFT_SHOW" then
-        SPF.filterText = ""
+        SPF.CraftState.filterText = ""
         if SPF.CraftSearchBox then SPF.CraftSearchBox:SetText("") end
+        stripColorCache = {} -- Clear cache on frame show
     end
 end
 SPF.Frame:SetScript("OnEvent", SPF.Frame.OnEvent)
+
+-- ============================================================================
+-- Helper Functions
+-- ============================================================================
+
+-- Create a search box with clear button and placeholder
+local function CreateSearchBox(parent, name, x, y, width, height, state, updateCallback, expandCallback)
+    if not parent then return nil end
+    
+    local searchBox = CreateFrame("EditBox", name, parent, "BackdropTemplate")
+    searchBox:SetSize(width, height)
+    searchBox:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    searchBox:SetFrameLevel(parent:GetFrameLevel() + 10)
+    
+    searchBox:SetBackdrop({
+        bgFile = CONSTANTS.BACKDROP_BG,
+        edgeFile = CONSTANTS.BACKDROP_EDGE,
+        tile = true,
+        tileSize = CONSTANTS.BACKDROP_TILE_SIZE,
+        edgeSize = CONSTANTS.BACKDROP_EDGE_SIZE,
+        insets = CONSTANTS.BACKDROP_INSETS
+    })
+    searchBox:SetBackdropColor(unpack(CONSTANTS.BACKDROP_COLOR))
+    searchBox:SetBackdropBorderColor(unpack(CONSTANTS.BACKDROP_BORDER_COLOR))
+    
+    searchBox:SetAutoFocus(false)
+    searchBox:SetTextInsets(6, 18, 0, 0)
+    
+    local fontName, _, fontFlags = ChatFontNormal:GetFont()
+    searchBox:SetFont(fontName, 11, fontFlags)
+    
+    -- Placeholder
+    local placeholder = searchBox:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    placeholder:SetPoint("LEFT", searchBox, "LEFT", 6, 0)
+    placeholder:SetText(SPF.searchPlaceholder)
+    placeholder:SetTextColor(unpack(CONSTANTS.COLOR_PLACEHOLDER))
+    
+    -- Clear Button
+    local clearButton = CreateFrame("Button", nil, searchBox)
+    clearButton:SetSize(14, 14)
+    clearButton:SetPoint("RIGHT", searchBox, "RIGHT", -2, 0)
+    clearButton:SetNormalTexture(CONSTANTS.TEXTURE_CLEAR_BUTTON)
+    clearButton:Hide()
+    
+    clearButton:SetScript("OnClick", function()
+        searchBox:SetText("")
+        searchBox:ClearFocus()
+    end)
+    clearButton:SetScript("OnEnter", function(self)
+        self:GetNormalTexture():SetVertexColor(unpack(CONSTANTS.COLOR_CLEAR_HOVER))
+    end)
+    clearButton:SetScript("OnLeave", function(self)
+        self:GetNormalTexture():SetVertexColor(unpack(CONSTANTS.COLOR_CLEAR_NORMAL))
+    end)
+    
+    -- Event Handlers
+    searchBox:SetScript("OnTextChanged", function(self, userInput)
+        local text = self:GetText()
+        state.filterText = text:lower()
+        
+        if text ~= "" then
+            placeholder:Hide()
+            clearButton:Show()
+            -- Expand only on user input, not programmatic changes
+            if userInput and expandCallback then 
+                expandCallback(0) 
+            end
+        else
+            placeholder:Show()
+            clearButton:Hide()
+        end
+        
+        if updateCallback then updateCallback() end
+    end)
+    
+    searchBox:SetScript("OnEscapePressed", function(self)
+        if self:GetText() ~= "" then
+            self:SetText("")
+        end
+        self:ClearFocus()
+    end)
+    
+    searchBox:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+    end)
+    
+    searchBox:SetScript("OnEditFocusGained", function(self)
+        placeholder:Hide()
+    end)
+    
+    searchBox:SetScript("OnEditFocusLost", function(self)
+        if self:GetText() == "" then
+            placeholder:Show()
+        end
+    end)
+    
+    return searchBox
+end
+
+-- Create a checkbox with label
+local function CreateCheckbox(parent, name, labelText, anchorTo, xOffset, yOffset, hitInset, state, stateKey, updateCallback, expandCallback)
+    if not parent then return nil end
+    
+    local checkbox = CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate")
+    checkbox:SetSize(CONSTANTS.CHECKBOX_SIZE, CONSTANTS.CHECKBOX_SIZE)
+    checkbox:SetPoint("LEFT", anchorTo, "RIGHT", xOffset, yOffset)
+    checkbox:SetHitRectInsets(0, hitInset, 0, 0)
+    checkbox:SetFrameLevel(parent:GetFrameLevel() + 10)
+    
+    local text = _G[checkbox:GetName().."Text"]
+    text:SetText(labelText)
+    text:SetFontObject(GameFontNormalSmall)
+    
+    checkbox:SetScript("OnClick", function(self)
+        state[stateKey] = self:GetChecked()
+        if state[stateKey] and expandCallback then expandCallback(0) end
+        if updateCallback then updateCallback() end
+    end)
+    
+    return checkbox
+end
+
+-- Get difficulty color with fallback
+local function GetDifficultyColor(type)
+    local color = TradeSkillTypeColor and TradeSkillTypeColor[type]
+    if not color then
+        color = DIFFICULTY_COLORS[type] or DIFFICULTY_COLORS.default
+    end
+    return color
+end
+
+-- Filtering logic (unified for both TradeSkill and Craft)
+local function ApplyFilters(numItems, getInfoFunc, getNumReagentsFunc, getReagentInfoFunc, state)
+    if not getInfoFunc then return {} end
+    
+    local filteredIndices = {}
+    
+    -- Quick path: if no filters, just return all indices
+    if state.filterText == "" and not state.showSkillUp and not state.showHaveMats then
+        for i = 1, numItems do
+            filteredIndices[i] = i
+        end
+        return filteredIndices
+    end
+    
+    -- Apply filters
+    local currentHeaderIndex = nil
+    local keepHeader = false
+    
+    for i = 1, numItems do
+        local name, type, numAvailable, isExpanded, altVerb, numSkillUps
+        
+        -- Different APIs have different return order
+        if getNumReagentsFunc == GetTradeSkillNumReagents then
+            -- TradeSkill: name, type, numAvailable, isExpanded, altVerb, numSkillUps
+            name, type, numAvailable, isExpanded, altVerb, numSkillUps = getInfoFunc(i)
+            -- Fix difficulty based on skill ups
+            if (numSkillUps or 0) == 0 and type ~= "header" then
+                type = "trivial"
+            end
+        else
+            -- Craft: name, rank, type, numAvailable, isExpanded
+            local rank
+            name, rank, type, numAvailable, isExpanded = getInfoFunc(i)
+        end
+        
+        if type == "header" then
+            currentHeaderIndex = i
+            keepHeader = false
+        else
+            local match = true
+            
+            -- Search filter
+            if state.filterText ~= "" then
+                local nameMatch = name and string.find(StripColor(name):lower(), state.filterText, 1, true)
+                
+                if not nameMatch and getNumReagentsFunc and getReagentInfoFunc then
+                    local numReagents = getNumReagentsFunc(i)
+                    for j = 1, numReagents do
+                        local reagentName = getReagentInfoFunc(i, j)
+                        if reagentName and string.find(StripColor(reagentName):lower(), state.filterText, 1, true) then
+                            nameMatch = true
+                            break
+                        end
+                    end
+                end
+                
+                if not nameMatch then
+                    match = false
+                end
+            end
+            
+            -- Skill up filter
+            if match and state.showSkillUp and type == "trivial" then
+                match = false
+            end
+            
+            -- Have materials filter
+            if match and state.showHaveMats and numAvailable == 0 then
+                match = false
+            end
+            
+            if match then
+                if currentHeaderIndex and not keepHeader then
+                    table.insert(filteredIndices, currentHeaderIndex)
+                    keepHeader = true
+                end
+                table.insert(filteredIndices, i)
+            end
+        end
+    end
+    
+    return filteredIndices
+end
+
+-- Check if selected index is in filtered results (O(1) hash lookup)
+local function IsSelectedInFiltered(selectedIndex, filteredIndices)
+    if not selectedIndex then return false end
+    
+    local filteredSet = {}
+    for _, idx in ipairs(filteredIndices) do
+        filteredSet[idx] = true
+    end
+    
+    return filteredSet[selectedIndex] == true
+end
+
 
 -- ============================================================================
 -- TradeSkillFrame Support
@@ -49,17 +382,17 @@ SPF.Frame:SetScript("OnEvent", SPF.Frame.OnEvent)
 function SPF:AdjustTradeSkillLayout()
     if enhanceProfessions then return end
 
-    -- 1. Hide Title
+    -- Hide Title
     if TradeSkillFrameTitleText then
         TradeSkillFrameTitleText:Hide()
     end
 
-    -- 2. Move RankFrame UP (to Title area)
+    -- Move RankFrame UP (to Title area)
     if TradeSkillRankFrame then
         TradeSkillRankFrame:ClearAllPoints()
-        TradeSkillRankFrame:SetPoint("TOP", TradeSkillFrame, "TOP", 5, -16)
-        TradeSkillRankFrame:SetWidth(254)
-        TradeSkillRankFrame:SetHeight(16)
+        TradeSkillRankFrame:SetPoint("TOP", TradeSkillFrame, "TOP", 5, CONSTANTS.LAYOUT_RANK_TOP_Y)
+        TradeSkillRankFrame:SetWidth(CONSTANTS.LAYOUT_RANK_WIDTH)
+        TradeSkillRankFrame:SetHeight(CONSTANTS.LAYOUT_RANK_HEIGHT)
 
         if TradeSkillRankFrameBorder then
             TradeSkillRankFrameBorder:Hide()
@@ -79,251 +412,142 @@ function SPF:AdjustTradeSkillLayout()
         end
     end
 
-    -- 3. Move My Controls UP (to Skill progress area)
-    local myControlsY = -35.5
+    -- Move Controls UP
     if SPF.SearchBox then
-        SPF.SearchBox:SetPoint("TOPLEFT", TradeSkillFrame, "TOPLEFT", 75, myControlsY)
+        SPF.SearchBox:SetPoint("TOPLEFT", TradeSkillFrame, "TOPLEFT", 75, CONSTANTS.LAYOUT_CONTROLS_Y)
     end
-    -- Checkboxes follow SearchBox automatically due to relative anchoring
 end
 
 function SPF:InitTradeSkillUI()
     if SPF.TradeSkillInitialized then return end
     SPF.TradeSkillInitialized = true
-    if enhanceProfessions then SPF.haveMatsText = "Have materials" end
+    
+    -- API Validation
+    if not TradeSkillFrame or not GetNumTradeSkills then return end
+    
+    -- Set text based on Leatrix Plus setting
+    local haveMatsText = SPF.tradeSkillHaveMatsText
+    if enhanceProfessions then 
+        haveMatsText = "Have materials" 
+    end
 
     local parent = TradeSkillFrame
 
-    local point, relativeTo, relativePoint, xOfs, yOfs = TradeSkillRankFrame:GetPoint()
-    TradeSkillRankFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs - 2)
-    TradeSkillRankFrame:SetWidth(280)
-    TradeSkillRankFrame:SetHeight(15)
+    -- Adjust RankFrame
+    if TradeSkillRankFrame then
+        local point, relativeTo, relativePoint, xOfs, yOfs = TradeSkillRankFrame:GetPoint()
+        TradeSkillRankFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs + CONSTANTS.RANKFRAME_OFFSET_Y)
+        TradeSkillRankFrame:SetWidth(CONSTANTS.RANKFRAME_WIDTH_NORMAL)
+        TradeSkillRankFrame:SetHeight(CONSTANTS.RANKFRAME_HEIGHT)
 
-    TradeSkillRankFrameBorder:SetWidth(290)
-    TradeSkillRankFrameBorder:SetHeight(38)
-    
-    
+        if TradeSkillRankFrameBorder then
+            TradeSkillRankFrameBorder:SetWidth(290)
+            TradeSkillRankFrameBorder:SetHeight(38)
+        end
+    end
+
+    -- Wrapper function for update callback
+    local function UpdateTradeSkill()
+        if TradeSkillFrame_Update then
+            TradeSkillFrame_Update()
+        end
+    end
+
     -- Search Box
-    local searchBox = CreateFrame("EditBox", "SPF_TradeSkillSearchBox", parent, "BackdropTemplate") 
-    searchBox:SetSize(130, 18)
-    searchBox:SetPoint("TOPLEFT", parent, "TOPLEFT", 71, -55)
-    -- Raise above TradeSkillRankFrame to avoid border shadow overlap
-    searchBox:SetFrameLevel(parent:GetFrameLevel() + 10)
-    
-    searchBox:SetBackdrop({
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 12,
-        insets = { left = 3, right = 3, top = 3, bottom = 3 }
-    })
-    searchBox:SetBackdropColor(0, 0, 0, 0.5)
-    searchBox:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
-
-    searchBox:SetAutoFocus(false)
-    searchBox:SetTextInsets(6, 18, 0, 0)
-
-    local fontName, _, fontFlags = ChatFontNormal:GetFont()
-    searchBox:SetFont(fontName, 11, fontFlags)
-
-    -- Placeholder Text (FontString overlay)
-    local placeholder = searchBox:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    placeholder:SetPoint("LEFT", searchBox, "LEFT", 6, 0)
-    placeholder:SetText(SPF.searchPlaceholder)
-    placeholder:SetTextColor(0.5, 0.5, 0.5)
-    
-    -- Clear Button
-    local clearButton = CreateFrame("Button", nil, searchBox)
-    clearButton:SetSize(14, 14)
-    clearButton:SetPoint("RIGHT", searchBox, "RIGHT", -2, 0)
-    clearButton:SetNormalTexture("Interface\\FriendsFrame\\ClearBroadcastIcon")
-    clearButton:Hide()
-    clearButton:SetScript("OnClick", function()
-        searchBox:SetText("")
-        searchBox:ClearFocus()
-    end)
-    clearButton:SetScript("OnEnter", function(self)
-        self:GetNormalTexture():SetVertexColor(1, 0.2, 0.2)
-    end)
-    clearButton:SetScript("OnLeave", function(self)
-        self:GetNormalTexture():SetVertexColor(1, 1, 1)
-    end)
-    
-    searchBox:SetScript("OnTextChanged", function(self)
-        local text = self:GetText()
-        SPF.filterText = text:lower()
-        
-        if text ~= "" then
-            placeholder:Hide()
-            clearButton:Show()
-            ExpandTradeSkillSubClass(0) 
-        else
-            placeholder:Show()
-            clearButton:Hide()
-        end
-        
-        TradeSkillFrame_Update()
-    end)
-    
-    searchBox:SetScript("OnEscapePressed", function(self) 
-        if self:GetText() ~= "" then
-            self:SetText("")
-        end
-        self:ClearFocus() 
-    end)
-    searchBox:SetScript("OnEnterPressed", function(self) 
-        self:ClearFocus() 
-    end)
-    
-    searchBox:SetScript("OnEditFocusGained", function(self)
-        placeholder:Hide()
-    end)
-    
-    searchBox:SetScript("OnEditFocusLost", function(self)
-        if self:GetText() == "" then
-            placeholder:Show()
-        end
-    end)
-
-    SPF.SearchBox = searchBox
+    SPF.SearchBox = CreateSearchBox(
+        parent,
+        "SPF_TradeSkillSearchBox",
+        CONSTANTS.TRADESKILL_SEARCH_X,
+        CONSTANTS.TRADESKILL_SEARCH_Y,
+        CONSTANTS.TRADESKILL_SEARCH_WIDTH,
+        CONSTANTS.SEARCH_HEIGHT,
+        SPF.TradeSkillState,
+        UpdateTradeSkill,
+        ExpandTradeSkillSubClass
+    )
 
     -- Skill Up Checkbox
-    local skillUp = CreateFrame("CheckButton", "SPF_TradeSkillSkillUpCheck", parent, "UICheckButtonTemplate")
-    skillUp:SetSize(21, 21)
-    skillUp:SetPoint("LEFT", searchBox, "RIGHT", 7, 0)
-    skillUp:SetHitRectInsets(0, -35, 0, 0) -- Extend clickable area to include text
-    skillUp:SetFrameLevel(parent:GetFrameLevel() + 10) -- Raise above RankFrame
-    
-    local skillUpText = _G[skillUp:GetName().."Text"]
-    skillUpText:SetText(SPF.skillUpText)
-    skillUpText:SetFontObject(GameFontNormalSmall)
-    
-    skillUp:SetScript("OnClick", function(self)
-        SPF.showSkillUp = self:GetChecked()
-        if SPF.showSkillUp then ExpandTradeSkillSubClass(0) end
-        TradeSkillFrame_Update()
-    end)
+    local skillUp = CreateCheckbox(
+        parent,
+        "SPF_TradeSkillSkillUpCheck",
+        SPF.skillUpText,
+        SPF.SearchBox,
+        CONSTANTS.CHECKBOX_OFFSET,
+        0,
+        -35,
+        SPF.TradeSkillState,
+        "showSkillUp",
+        UpdateTradeSkill,
+        ExpandTradeSkillSubClass
+    )
 
     -- Have Mats Checkbox
-    local haveMats = CreateFrame("CheckButton", "SPF_TradeSkillHaveMatsCheck", parent, "UICheckButtonTemplate")
-    haveMats:SetSize(21, 21)
-    haveMats:SetPoint("LEFT", skillUp, "RIGHT", 38, 0)
-    -- Extend clickable area - more for "Have materials" than "Have mats"
-    local haveMatsInset = enhanceProfessions and -75 or -50
-    haveMats:SetHitRectInsets(0, haveMatsInset, 0, 0)
-    haveMats:SetFrameLevel(parent:GetFrameLevel() + 10) -- Raise above RankFrame
-    
-    local haveMatsText = _G[haveMats:GetName().."Text"]
-    haveMatsText:SetText(SPF.haveMatsText)
-    haveMatsText:SetFontObject(GameFontNormalSmall)
-    
-    haveMats:SetScript("OnClick", function(self)
-        SPF.showHaveMats = self:GetChecked()
-        if SPF.showHaveMats then ExpandTradeSkillSubClass(0) end
-        TradeSkillFrame_Update()
-    end)
+    local haveMatsInset = enhanceProfessions and CONSTANTS.CHECKBOX_HIT_INSET_LEATRIX or CONSTANTS.CHECKBOX_HIT_INSET_NORMAL
+    local haveMats = CreateCheckbox(
+        parent,
+        "SPF_TradeSkillHaveMatsCheck",
+        haveMatsText,
+        skillUp,
+        CONSTANTS.CHECKBOX_SPACING,
+        0,
+        haveMatsInset,
+        SPF.TradeSkillState,
+        "showHaveMats",
+        UpdateTradeSkill,
+        ExpandTradeSkillSubClass
+    )
 
     -- Clear focus when clicking outside search box
-    parent:HookScript("OnMouseDown", function(self, button)
-        if searchBox:HasFocus() then
-            searchBox:ClearFocus()
-        end
-    end)
+    if SPF.SearchBox then
+        parent:HookScript("OnMouseDown", function(self, button)
+            if SPF.SearchBox:HasFocus() then
+                SPF.SearchBox:ClearFocus()
+            end
+        end)
+    end
 
     -- Hook Update
     hooksecurefunc("TradeSkillFrame_Update", SPF.TradeSkillFrame_Update)
 end
 
+
+
 function SPF.TradeSkillFrame_Update()
-    -- Enforce layout adjustment on every update to prevent default UI from resetting it
+    -- API Validation
+    if not GetNumTradeSkills or not TradeSkillListScrollFrame then return end
+    
+    -- Enforce layout adjustment
     SPF:AdjustTradeSkillLayout()
 
     local numTradeSkills = GetNumTradeSkills()
-    local filteredIndices = {}
-    local currentHeaderIndex = nil
-    local keepHeader = false
-
-    -- If no filters are active, show everything (but still use our rendering logic)
-    if SPF.filterText == "" and not SPF.showSkillUp and not SPF.showHaveMats then
-        for i = 1, numTradeSkills do
-            table.insert(filteredIndices, i)
-        end
-    else
-        for i = 1, numTradeSkills do
-            local name, type, numAvailable, isExpanded, altVerb, numSkillUps = GetTradeSkillInfo(i)
-            
-            if type == "header" then
-                currentHeaderIndex = i
-                keepHeader = false
-            else
-                local match = true
-                
-                -- Correct difficulty based on skill ups
-                if (numSkillUps or 0) == 0 then type = "trivial" end
-
-                -- Search
-                if SPF.filterText ~= "" then
-                    local nameMatch = name and string.find(StripColor(name):lower(), SPF.filterText, 1, true)
-                    local reagentMatch = false
-                    
-                    -- Check reagents if name doesn't match
-                    if not nameMatch then
-                        local numReagents = GetTradeSkillNumReagents(i)
-                        for j = 1, numReagents do
-                            local reagentName = GetTradeSkillReagentInfo(i, j)
-                            if reagentName and string.find(StripColor(reagentName):lower(), SPF.filterText, 1, true) then
-                                reagentMatch = true
-                                break
-                            end
-                        end
-                    end
-                    
-                    if not nameMatch and not reagentMatch then
-                        match = false
-                    end
-                end
-
-                -- Skill Up
-                if SPF.showSkillUp then
-                    if type == "trivial" then
-                        match = false
-                    end
-                end
-
-                -- Have Mats
-                if SPF.showHaveMats then
-                    if numAvailable == 0 then
-                        match = false
-                    end
-                end
-
-                if match then
-                    if currentHeaderIndex and not keepHeader then
-                        table.insert(filteredIndices, currentHeaderIndex)
-                        keepHeader = true
-                    end
-                    table.insert(filteredIndices, i)
-                end
-            end
-        end
-    end
+    
+    -- Apply filters using unified logic
+    local filteredIndices = ApplyFilters(
+        numTradeSkills,
+        GetTradeSkillInfo,
+        GetTradeSkillNumReagents,
+        GetTradeSkillReagentInfo,
+        SPF.TradeSkillState
+    )
 
     -- Update ScrollFrame
-    FauxScrollFrame_Update(TradeSkillListScrollFrame, #filteredIndices, TRADE_SKILLS_DISPLAYED, TRADE_SKILL_HEIGHT, nil, nil, nil, TradeSkillHighlightFrame, 293, 316)
+    FauxScrollFrame_Update(
+        TradeSkillListScrollFrame,
+        #filteredIndices,
+        TRADE_SKILLS_DISPLAYED,
+        TRADE_SKILL_HEIGHT,
+        nil, nil, nil,
+        TradeSkillHighlightFrame,
+        CONSTANTS.SCROLL_HIGHLIGHT_WIDTH,
+        CONSTANTS.SCROLL_HIGHLIGHT_HEIGHT
+    )
 
-    -- Check if selected recipe is in filtered results
-    local selectedIndex = GetTradeSkillSelectionIndex()
-    local selectedInFiltered = false
-    if selectedIndex then
-        for _, idx in ipairs(filteredIndices) do
-            if idx == selectedIndex then
-                selectedInFiltered = true
-                break
-            end
-        end
-    end
+    -- Check if selected recipe is in filtered results (O(1) hash lookup)
+    local selectedIndex = GetTradeSkillSelectionIndex and GetTradeSkillSelectionIndex()
+    local selectedInFiltered = IsSelectedInFiltered(selectedIndex, filteredIndices)
     
     -- Hide highlight if selected recipe is filtered out
-    if selectedIndex and not selectedInFiltered then
+    if selectedIndex and not selectedInFiltered and TradeSkillHighlightFrame then
         TradeSkillHighlightFrame:Hide()
     end
 
@@ -333,69 +557,85 @@ function SPF.TradeSkillFrame_Update()
         local skillIndex = filteredIndices[i + scrollOffset]
         local skillButton = _G["TradeSkillSkill"..i]
         
+        if not skillButton then break end
+        
         if skillIndex then
             local name, type, numAvailable, isExpanded, altVerb, numSkillUps = GetTradeSkillInfo(skillIndex)
             skillButton:SetID(skillIndex)
             skillButton:Show()
 
-            -- Visuals
             local skillButtonText = _G["TradeSkillSkill"..i.."Text"]
             local skillButtonCount = _G["TradeSkillSkill"..i.."Count"]
             
-            -- Fix for incorrect difficulty colors (e.g. Green when it should be Grey)
-            -- If numSkillUps is explicitly 0 or nil, treat as trivial
+            -- Fix difficulty colors
             if (numSkillUps or 0) == 0 and type ~= "header" then
                 type = "trivial"
             end
 
-            if ( type == "header" ) then
-                skillButton:SetNormalTexture("Interface\\Buttons\\UI-PlusButton-Up")
-                skillButton.r = 1.0; skillButton.g = 1.0; skillButton.b = 1.0;
-                skillButtonText:SetTextColor(1.0, 1.0, 1.0)
-                if ( isExpanded ) then
-                    skillButton:SetNormalTexture("Interface\\Buttons\\UI-MinusButton-Up")
+            if type == "header" then
+                skillButton:SetNormalTexture(CONSTANTS.TEXTURE_PLUS_BUTTON)
+                skillButton.r = 1.0
+                skillButton.g = 1.0
+                skillButton.b = 1.0
+                if skillButtonText then
+                    skillButtonText:SetTextColor(1.0, 1.0, 1.0)
                 end
-                _G["TradeSkillSkill"..i.."Highlight"]:SetTexture("Interface\\Buttons\\UI-PlusButton-Hilight")
+                if isExpanded then
+                    skillButton:SetNormalTexture(CONSTANTS.TEXTURE_MINUS_BUTTON)
+                end
+                local highlight = _G["TradeSkillSkill"..i.."Highlight"]
+                if highlight then
+                    highlight:SetTexture(CONSTANTS.TEXTURE_PLUS_HIGHLIGHT)
+                end
             else
                 skillButton:SetNormalTexture("")
-                _G["TradeSkillSkill"..i.."Highlight"]:SetTexture("")
-                
-                local color = TradeSkillTypeColor and TradeSkillTypeColor[type]
-                if not color then
-                    -- Fallback colors if global table is missing or type is unknown
-                    if type == "optimal" then color = {r=1.0, g=0.5, b=0.25}
-                    elseif type == "medium" then color = {r=1.0, g=1.0, b=0.0}
-                    elseif type == "easy" then color = {r=0.25, g=0.75, b=0.25}
-                    elseif type == "trivial" then color = {r=0.5, g=0.5, b=0.5}
-                    else color = {r=1.0, g=1.0, b=1.0} end
+                local highlight = _G["TradeSkillSkill"..i.."Highlight"]
+                if highlight then
+                    highlight:SetTexture("")
                 end
                 
-                skillButtonText:SetTextColor(color.r, color.g, color.b)
-            end
-            
-            -- Indent
-            if ( type == "header" ) then
-                skillButton:GetNormalTexture():SetPoint("LEFT", skillButton, "LEFT", 0, 0)
-                skillButtonText:SetPoint("LEFT", skillButton, "LEFT", 18, 0)
-            else
-                skillButtonText:SetPoint("LEFT", skillButton, "LEFT", 23, 0)
+                local color = GetDifficultyColor(type)
+                if skillButtonText then
+                    skillButtonText:SetTextColor(color.r, color.g, color.b)
+                end
             end
 
+            -- Indent
+            if type == "header" then
+                local texture = skillButton:GetNormalTexture()
+                if texture then
+                    texture:SetPoint("LEFT", skillButton, "LEFT", 0, 0)
+                end
+                if skillButtonText then
+                    skillButtonText:SetPoint("LEFT", skillButton, "LEFT", 18, 0)
+                end
+            else
+                if skillButtonText then
+                    skillButtonText:SetPoint("LEFT", skillButton, "LEFT", 23, 0)
+                end
+            end
+
+            -- Set text and indent based on type
             local displayName = StripColor(name)
             if numAvailable > 0 then
                 displayName = displayName.." ["..numAvailable.."]"
             end
-            skillButtonText:SetText(displayName)
+            
+            if skillButtonText then
+                skillButtonText:SetText(displayName)
+            end
             
             if skillButtonCount then
                 skillButtonCount:SetText("")
             end
             
             -- Selection Highlight
-            if ( selectedIndex == skillIndex ) then
+            if selectedIndex == skillIndex and TradeSkillHighlightFrame then
                 TradeSkillHighlightFrame:SetPoint("TOPLEFT", "TradeSkillSkill"..i, "TOPLEFT", 0, 0)
                 TradeSkillHighlightFrame:Show()
-                skillButtonText:SetVertexColor(1.0, 1.0, 1.0)
+                if skillButtonText then
+                    skillButtonText:SetVertexColor(1.0, 1.0, 1.0)
+                end
                 if skillButtonCount then
                     skillButtonCount:SetVertexColor(1.0, 1.0, 1.0)
                 end
@@ -413,238 +653,139 @@ end
 function SPF:InitCraftUI()
     if SPF.CraftInitialized then return end
     SPF.CraftInitialized = true
-    SPF.haveMatsText = "Have materials"
+    
+    -- API Validation
+    if not CraftFrame or not GetNumCrafts then return end
+    
+    -- Craft always uses "Have materials"
+    local haveMatsText = SPF.craftHaveMatsText
 
     local parent = CraftFrame
 
-    -- Adjust CraftRankFrame position (similar to TradeSkillRankFrame)
+    -- Adjust CraftRankFrame
     if CraftRankFrame then
         local point, relativeTo, relativePoint, xOfs, yOfs = CraftRankFrame:GetPoint()
-        CraftRankFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs - 2)
-        CraftRankFrame:SetWidth(enhanceProfessions and 280 or 270)
-        CraftRankFrame:SetHeight(16)
+        CraftRankFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs + CONSTANTS.RANKFRAME_OFFSET_Y)
+        CraftRankFrame:SetWidth(enhanceProfessions and CONSTANTS.CRAFT_RANKFRAME_WIDTH_LEATRIX or CONSTANTS.CRAFT_RANKFRAME_WIDTH_NORMAL)
+        CraftRankFrame:SetHeight(CONSTANTS.CRAFT_RANKFRAME_HEIGHT)
 
-        CraftRankFrameBorder:SetWidth(enhanceProfessions and 290 or 280)
-        CraftRankFrameBorder:SetHeight(38)
+        if CraftRankFrameBorder then
+            CraftRankFrameBorder:SetWidth(enhanceProfessions and CONSTANTS.CRAFT_RANKFRAME_BORDER_WIDTH_LEATRIX or CONSTANTS.CRAFT_RANKFRAME_BORDER_WIDTH_NORMAL)
+            CraftRankFrameBorder:SetHeight(CONSTANTS.CRAFT_RANKFRAME_BORDER_HEIGHT)
+        end
+    end
+
+    -- Wrapper function for update callback
+    local function UpdateCraft()
+        if CraftFrame_Update then
+            CraftFrame_Update()
+        end
     end
 
     -- Search Box
-    local searchBox = CreateFrame("EditBox", "SPF_CraftSearchBox", parent, "BackdropTemplate")
-    local searchBoxX = enhanceProfessions and 71 or 18
-    local searchBoxY = enhanceProfessions and -55 or -73
-    searchBox:SetFrameLevel(parent:GetFrameLevel() + 10)
-    searchBox:SetSize(160, 18)
-    searchBox:SetPoint("TOPLEFT", parent, "TOPLEFT", searchBoxX, searchBoxY)
+    local searchX = enhanceProfessions and CONSTANTS.CRAFT_SEARCH_X_LEATRIX or CONSTANTS.CRAFT_SEARCH_X_NORMAL
+    local searchY = enhanceProfessions and CONSTANTS.CRAFT_SEARCH_Y_LEATRIX or CONSTANTS.CRAFT_SEARCH_Y_NORMAL
     
-    searchBox:SetBackdrop({
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 12,
-        insets = { left = 3, right = 3, top = 3, bottom = 3 }
-    })
-    searchBox:SetBackdropColor(0, 0, 0, 0.5)
-    searchBox:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
-
-    searchBox:SetAutoFocus(false)
-    searchBox:SetTextInsets(6, 0, 0, 0)
-
-    local fontName, _, fontFlags = ChatFontNormal:GetFont()
-    searchBox:SetFont(fontName, 11, fontFlags)
-    
-    -- Placeholder Text (FontString overlay)
-    local placeholder = searchBox:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    placeholder:SetPoint("LEFT", searchBox, "LEFT", 6, 0)
-    placeholder:SetText("Search...")
-    placeholder:SetTextColor(0.5, 0.5, 0.5)
-    
-    -- Clear Button
-    local clearButton = CreateFrame("Button", nil, searchBox)
-    clearButton:SetSize(14, 14)
-    clearButton:SetPoint("RIGHT", searchBox, "RIGHT", -4, 0)
-    clearButton:SetNormalTexture("Interface\\FriendsFrame\\ClearBroadcastIcon")
-    clearButton:Hide()
-    clearButton:SetScript("OnClick", function()
-        searchBox:SetText("")
-        searchBox:ClearFocus()
-    end)
-    clearButton:SetScript("OnEnter", function(self)
-        self:GetNormalTexture():SetVertexColor(1, 0.2, 0.2)
-    end)
-    clearButton:SetScript("OnLeave", function(self)
-        self:GetNormalTexture():SetVertexColor(1, 1, 1)
-    end)
-    
-    searchBox:SetScript("OnTextChanged", function(self)
-        local text = self:GetText()
-        SPF.filterText = text:lower()
-        
-        if text ~= "" then
-            placeholder:Hide()
-            clearButton:Show()
-            ExpandCraftSkillLine(0)
-        else
-            placeholder:Show()
-            clearButton:Hide()
-        end
-        
-        CraftFrame_Update()
-    end)
-    
-    searchBox:SetScript("OnEscapePressed", function(self) 
-        if self:GetText() ~= "" then
-            self:SetText("")
-        end
-        self:ClearFocus() 
-    end)
-    searchBox:SetScript("OnEnterPressed", function(self) 
-        self:ClearFocus() 
-    end)
-    
-    searchBox:SetScript("OnEditFocusGained", function(self)
-        placeholder:Hide()
-    end)
-    
-    searchBox:SetScript("OnEditFocusLost", function(self)
-        if self:GetText() == "" then
-            placeholder:Show()
-        end
-    end)
-
-    SPF.CraftSearchBox = searchBox
+    SPF.CraftSearchBox = CreateSearchBox(
+        parent,
+        "SPF_CraftSearchBox",
+        searchX,
+        searchY,
+        CONSTANTS.CRAFT_SEARCH_WIDTH,
+        CONSTANTS.SEARCH_HEIGHT,
+        SPF.CraftState,
+        UpdateCraft,
+        ExpandCraftSkillLine
+    )
 
     -- Skill Up Checkbox
-    local skillUp = CreateFrame("CheckButton", "SPF_CraftSkillUpCheck", parent, "UICheckButtonTemplate")
-    skillUp:SetSize(21, 21)
-    skillUp:SetPoint("LEFT", searchBox, "RIGHT", 7, 0)
-    skillUp:SetHitRectInsets(0, -35, 0, 0) -- Extend clickable area to include text
-    
-    local skillUpText = _G[skillUp:GetName().."Text"]
-    skillUpText:SetText("Skill up")
-    skillUpText:SetFontObject(GameFontNormalSmall)
-    
-    skillUp:SetScript("OnClick", function(self)
-        SPF.showSkillUp = self:GetChecked()
-        if SPF.showSkillUp then ExpandCraftSkillLine(0) end
-        CraftFrame_Update()
-    end)
+    local skillUp = CreateCheckbox(
+        parent,
+        "SPF_CraftSkillUpCheck",
+        "Skill up",
+        SPF.CraftSearchBox,
+        CONSTANTS.CHECKBOX_OFFSET,
+        0,
+        -35,
+        SPF.CraftState,
+        "showSkillUp",
+        UpdateCraft,
+        ExpandCraftSkillLine
+    )
 
     -- Have Mats Checkbox
-    local haveMats = CreateFrame("CheckButton", "SPF_CraftHaveMatsCheck", parent, "UICheckButtonTemplate")
-    haveMats:SetSize(21, 21)
-    haveMats:SetPoint("LEFT", skillUp, "RIGHT", 38, 0)
-    -- Extend clickable area - more for "Have materials" than "Have mats"
-    local haveMatsInset = enhanceProfessions and -75 or -50
-    haveMats:SetHitRectInsets(0, haveMatsInset, 0, 0)
-    
-    local haveMatsText = _G[haveMats:GetName().."Text"]
-    haveMatsText:SetText(SPF.haveMatsText)
-    haveMatsText:SetFontObject(GameFontNormalSmall)
-    
-    haveMats:SetScript("OnClick", function(self)
-        SPF.showHaveMats = self:GetChecked()
-        if SPF.showHaveMats then ExpandCraftSkillLine(0) end
-        CraftFrame_Update()
-    end)
+    local haveMatsInset = enhanceProfessions and CONSTANTS.CHECKBOX_HIT_INSET_LEATRIX or CONSTANTS.CHECKBOX_HIT_INSET_NORMAL
+    local haveMats = CreateCheckbox(
+        parent,
+        "SPF_CraftHaveMatsCheck",
+        haveMatsText,
+        skillUp,
+        CONSTANTS.CHECKBOX_SPACING,
+        0,
+        haveMatsInset,
+        SPF.CraftState,
+        "showHaveMats",
+        UpdateCraft,
+        ExpandCraftSkillLine
+    )
 
     -- Clear focus when clicking outside search box
-    parent:HookScript("OnMouseDown", function(self, button)
-        if searchBox:HasFocus() then
-            searchBox:ClearFocus()
-        end
-    end)
+    if SPF.CraftSearchBox then
+        parent:HookScript("OnMouseDown", function(self, button)
+            if SPF.CraftSearchBox:HasFocus() then
+                SPF.CraftSearchBox:ClearFocus()
+            end
+        end)
+    end
 
     -- Hook Update
     hooksecurefunc("CraftFrame_Update", SPF.CraftFrame_Update)
 end
 
+
 function SPF.CraftFrame_Update()
+    -- API Validation
+    if not GetNumCrafts or not CraftListScrollFrame then return end
+    
     local numCrafts = GetNumCrafts()
-    local filteredIndices = {}
-    local currentHeaderIndex = nil
-    local keepHeader = false
+    
+    -- Apply filters using unified logic
+    local filteredIndices = ApplyFilters(
+        numCrafts,
+        GetCraftInfo,
+        GetCraftNumReagents,
+        GetCraftReagentInfo,
+        SPF.CraftState
+    )
 
-    if SPF.filterText == "" and not SPF.showSkillUp and not SPF.showHaveMats then
-        for i = 1, numCrafts do
-            table.insert(filteredIndices, i)
-        end
-    else
-        for i = 1, numCrafts do
-            local name, rank, type, numAvailable, isExpanded = GetCraftInfo(i)
-            
-            if type == "header" then
-                currentHeaderIndex = i
-                keepHeader = false
-            else
-                local match = true
+    -- Update ScrollFrame
+    FauxScrollFrame_Update(
+        CraftListScrollFrame,
+        #filteredIndices,
+        CRAFTS_DISPLAYED,
+        CRAFT_SKILL_HEIGHT,
+        nil, nil, nil,
+        CraftHighlightFrame,
+        CONSTANTS.SCROLL_HIGHLIGHT_WIDTH,
+        CONSTANTS.SCROLL_HIGHLIGHT_HEIGHT
+    )
 
-                if SPF.filterText ~= "" then
-                    local nameMatch = name and string.find(StripColor(name):lower(), SPF.filterText, 1, true)
-                    local reagentMatch = false
-                    
-                    -- Check reagents if name doesn't match
-                    if not nameMatch then
-                        local numReagents = GetCraftNumReagents(i)
-                        for j = 1, numReagents do
-                            local reagentName = GetCraftReagentInfo(i, j)
-                            if reagentName and string.find(StripColor(reagentName):lower(), SPF.filterText, 1, true) then
-                                reagentMatch = true
-                                break
-                            end
-                        end
-                    end
-                    
-                    if not nameMatch and not reagentMatch then
-                        match = false
-                    end
-                end
-
-                if SPF.showSkillUp then
-                    -- For CraftFrame, trivial = grey = no skill up
-                    if type == "trivial" then
-                        match = false
-                    end
-                end
-
-                if SPF.showHaveMats then
-                    if numAvailable == 0 then
-                        match = false
-                    end
-                end
-
-                if match then
-                    if currentHeaderIndex and not keepHeader then
-                        table.insert(filteredIndices, currentHeaderIndex)
-                        keepHeader = true
-                    end
-                    table.insert(filteredIndices, i)
-                end
-            end
-        end
-    end
-
-    FauxScrollFrame_Update(CraftListScrollFrame, #filteredIndices, CRAFTS_DISPLAYED, CRAFT_SKILL_HEIGHT, nil, nil, nil, CraftHighlightFrame, 293, 316)
-
-    -- Check if selected craft is in filtered results
-    local selectedIndex = GetCraftSelectionIndex()
-    local selectedInFiltered = false
-    if selectedIndex then
-        for _, idx in ipairs(filteredIndices) do
-            if idx == selectedIndex then
-                selectedInFiltered = true
-                break
-            end
-        end
-    end
+    -- Check if selected craft is in filtered results (O(1) hash lookup)
+    local selectedIndex = GetCraftSelectionIndex and GetCraftSelectionIndex()
+    local selectedInFiltered = IsSelectedInFiltered(selectedIndex, filteredIndices)
     
     -- Hide highlight if selected craft is filtered out
-    if selectedIndex and not selectedInFiltered then
+    if selectedIndex and not selectedInFiltered and CraftHighlightFrame then
         CraftHighlightFrame:Hide()
     end
 
+    -- Update Buttons
     local scrollOffset = FauxScrollFrame_GetOffset(CraftListScrollFrame)
     for i = 1, CRAFTS_DISPLAYED do
         local craftIndex = filteredIndices[i + scrollOffset]
         local craftButton = _G["Craft"..i]
+        
+        if not craftButton then break end
         
         if craftIndex then
             local name, rank, type, numAvailable, isExpanded = GetCraftInfo(craftIndex)
@@ -655,51 +796,67 @@ function SPF.CraftFrame_Update()
             local craftButtonCost = _G["Craft"..i.."Cost"]
             local craftButtonCount = _G["Craft"..i.."Count"]
 
-            if ( type == "header" ) then
-                craftButton:SetNormalTexture("Interface\\Buttons\\UI-PlusButton-Up")
-                craftButtonText:SetTextColor(1.0, 1.0, 1.0)
-                if ( isExpanded ) then
-                    craftButton:SetNormalTexture("Interface\\Buttons\\UI-MinusButton-Up")
+            if type == "header" then
+                craftButton:SetNormalTexture(CONSTANTS.TEXTURE_PLUS_BUTTON)
+                if craftButtonText then
+                    craftButtonText:SetTextColor(1.0, 1.0, 1.0)
                 end
-                _G["Craft"..i.."Highlight"]:SetTexture("Interface\\Buttons\\UI-PlusButton-Hilight")
+                if isExpanded then
+                    craftButton:SetNormalTexture(CONSTANTS.TEXTURE_MINUS_BUTTON)
+                end
+                local highlight = _G["Craft"..i.."Highlight"]
+                if highlight then
+                    highlight:SetTexture(CONSTANTS.TEXTURE_PLUS_HIGHLIGHT)
+                end
             else
                 craftButton:SetNormalTexture("")
-                _G["Craft"..i.."Highlight"]:SetTexture("")
-                
-                local color = TradeSkillTypeColor and TradeSkillTypeColor[type]
-                if not color then
-                    if type == "optimal" then color = {r=1.0, g=0.5, b=0.25}
-                    elseif type == "medium" then color = {r=1.0, g=1.0, b=0.0}
-                    elseif type == "easy" then color = {r=0.25, g=0.75, b=0.25}
-                    elseif type == "trivial" then color = {r=0.5, g=0.5, b=0.5}
-                    else color = {r=1.0, g=1.0, b=1.0} end
+                local highlight = _G["Craft"..i.."Highlight"]
+                if highlight then
+                    highlight:SetTexture("")
                 end
                 
-                craftButtonText:SetTextColor(color.r, color.g, color.b)
-            end
-            
-            if ( type == "header" ) then
-                craftButton:GetNormalTexture():SetPoint("LEFT", craftButton, "LEFT", 0, 0)
-                craftButtonText:SetPoint("LEFT", craftButton, "LEFT", 25, 0)
-            else
-                craftButtonText:SetPoint("LEFT", craftButton, "LEFT", 40, 0)
+                local color = GetDifficultyColor(type)
+                if craftButtonText then
+                    craftButtonText:SetTextColor(color.r, color.g, color.b)
+                end
             end
 
+            -- Indent
+            if type == "header" then
+                local texture = craftButton:GetNormalTexture()
+                if texture then
+                    texture:SetPoint("LEFT", craftButton, "LEFT", 0, 0)
+                end
+                if craftButtonText then
+                    craftButtonText:SetPoint("LEFT", craftButton, "LEFT", 25, 0)
+                end
+            else
+                if craftButtonText then
+                    craftButtonText:SetPoint("LEFT", craftButton, "LEFT", 40, 0)
+                end
+            end
+
+            -- Set text and indent
             local displayName = StripColor(name)
             if numAvailable > 0 then
                 displayName = displayName.." ["..numAvailable.."]"
             end
-            craftButtonText:SetText(displayName)
+            
+            if craftButtonText then
+                craftButtonText:SetText(displayName)
+            end
             
             if craftButtonCount then
                 craftButtonCount:SetText("")
             end
             
-            -- Simplified selection highlight logic
-            if ( selectedIndex == craftIndex ) then
+            -- Selection highlight
+            if selectedIndex == craftIndex and CraftHighlightFrame then
                 CraftHighlightFrame:SetPoint("TOPLEFT", "Craft"..i, "TOPLEFT", 0, 0)
                 CraftHighlightFrame:Show()
-                craftButtonText:SetVertexColor(1.0, 1.0, 1.0)
+                if craftButtonText then
+                    craftButtonText:SetVertexColor(1.0, 1.0, 1.0)
+                end
                 if craftButtonCount then
                     craftButtonCount:SetVertexColor(1.0, 1.0, 1.0)
                 end

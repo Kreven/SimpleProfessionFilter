@@ -63,14 +63,13 @@ SimpleProfessionFilter is designed to be lightweight and compatible with most pr
 - **Interface Version**: 11508 (Classic Era 1.15.x)
 - **Memory Usage**: ~50 KB
 - **Performance**: Optimized for real-time filtering with minimal overhead
-- **Code**: Pure Lua, no external dependencies
 
 ### Contributing
 Contributions are welcome! Please feel free to submit issues or pull requests.
 
 ## Credits
 
-- **Author**: Krev
+- **Author**: KrevenRess
 - **Made with**: ❤️ from 🇺🇦 Ukraine
 
 ## License
