@@ -798,6 +798,9 @@ function SPF.CraftFrame_Update()
 
             if type == "header" then
                 craftButton:SetNormalTexture(CONSTANTS.TEXTURE_PLUS_BUTTON)
+                craftButton.r = 1.0
+                craftButton.g = 1.0
+                craftButton.b = 1.0
                 if craftButtonText then
                     craftButtonText:SetTextColor(1.0, 1.0, 1.0)
                 end
@@ -866,3 +869,34 @@ function SPF.CraftFrame_Update()
         end
     end
 end
+
+-- ============================================================================
+-- Shift+Click Item Insertion Hook
+-- ============================================================================
+
+local orig_HandleModifiedItemClick = HandleModifiedItemClick
+function HandleModifiedItemClick(link)
+    if not link then return end
+    if IsModifiedClick("CHATLINK") then
+        local focusedEditBox = nil
+        
+        if SPF.SearchBox and SPF.SearchBox:HasFocus() then
+            focusedEditBox = SPF.SearchBox
+        elseif SPF.CraftSearchBox and SPF.CraftSearchBox:HasFocus() then
+            focusedEditBox = SPF.CraftSearchBox
+        end
+
+        if focusedEditBox then
+            local name = GetItemInfo(link) or link:match("%[([^%]]+)%]")
+            if name then
+                focusedEditBox:Insert(name)
+                return true
+            end
+        end
+    end
+    
+    if orig_HandleModifiedItemClick then
+        return orig_HandleModifiedItemClick(link)
+    end
+end
+

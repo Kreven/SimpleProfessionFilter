@@ -7,6 +7,7 @@ A minimalist profession filtering addon for World of Warcraft Classic Era that e
 ### 🔍 Smart Search
 - **Search by recipe name** - Find recipes quickly by typing their name
 - **Search by materials** - Type any reagent name to find all recipes that use it
+- **Shift+Click insertion** - Shift+Click any item (bag, chat, recipe) to insert its name into the search box
 - **Real-time filtering** - Results update as you type
 - **Clear button** - Quickly clear your search with one click
 
@@ -44,6 +45,7 @@ git clone https://github.com/YourUsername/SimpleProfessionFilter.git
 3. Toggle "Skill up" to show only recipes that increase your skill
 4. Toggle "Have mats" to show only craftable recipes
 5. Click the X button or press ESC to clear your search
+6. **Shift+Click** items in your bag or chat to instantly search for them
 
 ### Examples
 - Type `"copper"` to find all recipes using Copper Bar or Copper Ore
@@ -81,7 +83,7 @@ SimpleProfessionFilter is designed to be lightweight and compatible with most pr
 ## Technical Details
 
 - **Interface Version**: 11508 (Classic Era 1.15.x)
-- **Memory Usage**: ~50 KB
+- **Memory Usage**: ~60 KB
 - **Performance**: Optimized for real-time filtering with minimal overhead
 
 ### Contributing
