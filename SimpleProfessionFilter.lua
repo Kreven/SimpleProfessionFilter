@@ -10,12 +10,21 @@ local CONSTANTS = {
     TRADESKILL_SEARCH_X = 71,
     TRADESKILL_SEARCH_Y = -55,
     TRADESKILL_SEARCH_WIDTH = 130,
-    CRAFT_SEARCH_X_NORMAL = 18,
+    CRAFT_SEARCH_X_NORMAL = 107,
     CRAFT_SEARCH_X_LEATRIX = 71,
     CRAFT_SEARCH_Y_NORMAL = -73,
     CRAFT_SEARCH_Y_LEATRIX = -55,
-    CRAFT_SEARCH_WIDTH = 160,
+    CRAFT_SEARCH_WIDTH = 100,
+    CRAFT_SEARCH_WIDTH_LEATRIX = 130,
     SEARCH_HEIGHT = 18,
+    
+    -- DropDown
+    CRAFT_DROPDOWN_X_NORMAL = 0,
+    CRAFT_DROPDOWN_X_LEATRIX = 505,
+    CRAFT_DROPDOWN_Y_NORMAL = -67,
+    CRAFT_DROPDOWN_Y_LEATRIX = -40,
+    CRAFT_DROPDOWN_WIDTH = 70,
+    CRAFT_DROPDOWN_WIDTH_LEATRIX = 135,
     
     -- Checkbox
     CHECKBOX_SIZE = 21,
@@ -90,13 +99,30 @@ SPF.TradeSkillState = {
 
 SPF.CraftState = {
     filterText = "",
+    filterCategory = "All",
     showSkillUp = false,
     showHaveMats = false
 }
 
+-- Craft Categories (Enchanting)
+local CRAFT_CATEGORIES = {
+    "All",
+    "Boots",
+    "Bracer",
+    "Chest",
+    "Cloak",
+    "Gloves",
+    "Shield",
+    "Weapon",
+    "Wand",
+    "Rod",
+    "Oil",
+    "Other"
+}
+
 SPF.skillUpText = "Skill up"
 SPF.tradeSkillHaveMatsText = "Have mats"  -- For TradeSkill (normal professions)
-SPF.craftHaveMatsText = "Have materials"   -- For Craft (Enchanting)
+SPF.craftHaveMatsText = "Have mats"   -- For Craft (Enchanting)
 SPF.searchPlaceholder = "Search..."
 
 -- ============================================================================
@@ -111,6 +137,26 @@ local function StripColor(text)
     local stripped = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
     stripColorCache[text] = stripped
     return stripped
+end
+
+function SPF:TryInsertLink(text)
+    if not text then return false end
+    
+    local focusedEditBox = SPF.FocusedEditBox
+    
+    -- Check for grace period focus
+    if not focusedEditBox and SPF.LastFocusedEditBox and SPF.LastFocusTime then
+         if (GetTime() - SPF.LastFocusTime) < 0.5 then
+             focusedEditBox = SPF.LastFocusedEditBox
+         end
+    end
+    
+    if focusedEditBox then
+        focusedEditBox:Insert(text)
+        return true
+    end
+    
+    return false
 end
 
 local isLeatrixLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded("Leatrix_Plus")) or IsAddOnLoaded("Leatrix_Plus")
@@ -235,12 +281,16 @@ local function CreateSearchBox(parent, name, x, y, width, height, state, updateC
     
     searchBox:SetScript("OnEditFocusGained", function(self)
         placeholder:Hide()
+        SPF.FocusedEditBox = self
     end)
     
     searchBox:SetScript("OnEditFocusLost", function(self)
         if self:GetText() == "" then
             placeholder:Show()
         end
+        SPF.FocusedEditBox = nil
+        SPF.LastFocusedEditBox = self
+        SPF.LastFocusTime = GetTime()
     end)
     
     return searchBox
@@ -285,7 +335,8 @@ local function ApplyFilters(numItems, getInfoFunc, getNumReagentsFunc, getReagen
     local filteredIndices = {}
     
     -- Quick path: if no filters, just return all indices
-    if state.filterText == "" and not state.showSkillUp and not state.showHaveMats then
+    local noCategoryFilter = (not state.filterCategory or state.filterCategory == "All")
+    if state.filterText == "" and not state.showSkillUp and not state.showHaveMats and noCategoryFilter then
         for i = 1, numItems do
             filteredIndices[i] = i
         end
@@ -319,6 +370,7 @@ local function ApplyFilters(numItems, getInfoFunc, getNumReagentsFunc, getReagen
         else
             local match = true
             
+
             -- Search filter
             if state.filterText ~= "" then
                 local nameMatch = name and string.find(StripColor(name):lower(), state.filterText, 1, true)
@@ -335,6 +387,26 @@ local function ApplyFilters(numItems, getInfoFunc, getNumReagentsFunc, getReagen
                 end
                 
                 if not nameMatch then
+                    match = false
+                end
+            end
+            
+            -- Category filter (Craft only)
+            if match and state.filterCategory and state.filterCategory ~= "All" then
+                local strippedName = StripColor(name):lower()
+                local cat = state.filterCategory:lower()
+                
+                if cat == "other" then
+                    -- Check against all other categories
+                    local found = false
+                    for _, c in ipairs(CRAFT_CATEGORIES) do
+                        if c ~= "All" and c ~= "Other" and strippedName:find(c:lower(), 1, true) then
+                            found = true
+                            break
+                        end
+                    end
+                    if found then match = false end
+                elseif not strippedName:find(cat, 1, true) then
                     match = false
                 end
             end
@@ -657,8 +729,10 @@ function SPF:InitCraftUI()
     -- API Validation
     if not CraftFrame or not GetNumCrafts then return end
     
-    -- Craft always uses "Have materials"
     local haveMatsText = SPF.craftHaveMatsText
+    if enhanceProfessions then 
+        haveMatsText = "Have materials" 
+    end
 
     local parent = CraftFrame
 
@@ -685,13 +759,14 @@ function SPF:InitCraftUI()
     -- Search Box
     local searchX = enhanceProfessions and CONSTANTS.CRAFT_SEARCH_X_LEATRIX or CONSTANTS.CRAFT_SEARCH_X_NORMAL
     local searchY = enhanceProfessions and CONSTANTS.CRAFT_SEARCH_Y_LEATRIX or CONSTANTS.CRAFT_SEARCH_Y_NORMAL
+    local searchWidth = enhanceProfessions and CONSTANTS.CRAFT_SEARCH_WIDTH_LEATRIX or CONSTANTS.CRAFT_SEARCH_WIDTH
     
     SPF.CraftSearchBox = CreateSearchBox(
         parent,
         "SPF_CraftSearchBox",
         searchX,
         searchY,
-        CONSTANTS.CRAFT_SEARCH_WIDTH,
+        searchWidth,
         CONSTANTS.SEARCH_HEIGHT,
         SPF.CraftState,
         UpdateCraft,
@@ -740,6 +815,185 @@ function SPF:InitCraftUI()
 
     -- Hook Update
     hooksecurefunc("CraftFrame_Update", SPF.CraftFrame_Update)
+    
+    -- Explicitly hook Reagent buttons for Shift+Click
+    for i = 1, 8 do
+        local reagentBtn = _G["CraftReagent"..i]
+        if reagentBtn then
+            reagentBtn:HookScript("OnClick", function(self)
+                if IsModifiedClick("CHATLINK") and SPF.CraftSearchBox then
+                    local link = GetCraftReagentItemLink(GetCraftSelectionIndex(), self:GetID())
+                    if link then
+                        local name = GetItemInfo(link) or link:match("%[([^%]]+)%]")
+                        if name then
+                            SPF:TryInsertLink(name)
+                        end
+                    end
+                end
+            end)
+        end
+    end
+    
+    -- Init DropDown
+    SPF:InitCraftDropDown(parent)
+end
+
+
+
+
+-- Custom Dropdown implementation
+function SPF:CreateCraftOptionsMenu()
+    local frame = CreateFrame("Frame", "SPF_CraftOptionsMenu", UIParent, "BackdropTemplate")
+    frame:SetSize(155, #CRAFT_CATEGORIES * 16 + 30)
+    frame:SetFrameStrata("DIALOG")
+    frame:SetClampedToScreen(true)
+    frame:Hide()
+    
+    frame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8", 
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true, tileSize = 32, edgeSize = 32,
+        insets = { left = 8, right = 8, top = 8, bottom = 8 }
+    })
+    frame:SetBackdropColor(0, 0, 0, 0.8)
+    frame:SetBackdropBorderColor(1, 1, 1, 1)
+
+    -- Fullscreen closer button (to close when clicking outside)
+    local closer = CreateFrame("Button", nil, UIParent)
+    closer:SetFrameStrata("DIALOG")
+    closer:SetFrameLevel(frame:GetFrameLevel() - 1)
+    closer:SetAllPoints(UIParent)
+    closer:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    closer:SetScript("OnClick", function()
+        frame:Hide()
+        closer:Hide()
+    end)
+    closer:Hide()
+    frame.closer = closer
+
+    frame.buttons = {}
+    
+    local function Button_OnClick(self)
+        SPF.CraftState.filterCategory = self.value
+        UIDropDownMenu_SetText(SPF.CraftDropDown, self.value == "All" and "All Slots" or self.value)
+        frame:Hide()
+        closer:Hide()
+        
+        -- Update Check marks
+        for _, btn in ipairs(frame.buttons) do
+            if btn.check then
+                if btn.value == self.value then
+                    btn.check:Show()
+                else
+                    btn.check:Hide()
+                end
+            end
+        end
+        
+        if CraftFrame_Update then
+            CraftFrame_Update()
+        end
+    end
+
+    for i, category in ipairs(CRAFT_CATEGORIES) do
+        local btn = CreateFrame("Button", nil, frame)
+        btn:SetHeight(16)
+        btn:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -15 - (i-1)*16)
+        btn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -15 - (i-1)*16)
+        
+        btn.value = category
+        
+        -- Text
+        local text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        text:SetPoint("LEFT", btn, "LEFT", 18, 0)
+        text:SetText(category == "All" and "All Slots" or category)
+        text:SetJustifyH("LEFT")
+        btn.text = text
+        
+        -- Check
+        local check = btn:CreateTexture(nil, "ARTWORK")
+        check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
+        check:SetSize(16, 16)
+        check:SetPoint("LEFT", btn, "LEFT", 0, 0)
+        check:Hide()
+        if category == "All" then check:Show() end
+        btn.check = check
+        
+        -- Highlight
+        local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(btn)
+        hl:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+        hl:SetBlendMode("ADD")
+        
+        btn:SetScript("OnClick", Button_OnClick)
+        
+        table.insert(frame.buttons, btn)
+    end
+    
+    return frame
+end
+
+function SPF:ToggleCraftMenu()
+    if not SPF.CraftOptionsMenu then
+        SPF.CraftOptionsMenu = SPF:CreateCraftOptionsMenu()
+    end
+    
+    local menu = SPF.CraftOptionsMenu
+    if menu:IsShown() then
+        menu:Hide()
+        menu.closer:Hide()
+    else
+        -- Anchor to the Main Dropdown
+        menu:ClearAllPoints()
+        menu:SetPoint("TOPLEFT", SPF.CraftDropDown, "BOTTOMLEFT", 15, 6)
+        menu:Show()
+        menu.closer:Show()
+        
+        -- Update state (checks)
+        local current = SPF.CraftState.filterCategory or "All"
+        for _, btn in ipairs(menu.buttons) do
+            if btn.check then
+                 if btn.value == current then
+                     btn.check:Show()
+                 else
+                     btn.check:Hide()
+                 end
+            end
+        end
+    end
+end
+
+function SPF:InitCraftDropDown(parent)
+    local dropDown = CreateFrame("Frame", "SPF_CraftDropDown", parent, "UIDropDownMenuTemplate")
+    SPF.CraftDropDown = dropDown
+    
+    local x = enhanceProfessions and CONSTANTS.CRAFT_DROPDOWN_X_LEATRIX or CONSTANTS.CRAFT_DROPDOWN_X_NORMAL
+    local y = enhanceProfessions and CONSTANTS.CRAFT_DROPDOWN_Y_LEATRIX or CONSTANTS.CRAFT_DROPDOWN_Y_NORMAL
+    local width = enhanceProfessions and CONSTANTS.CRAFT_DROPDOWN_WIDTH_LEATRIX or CONSTANTS.CRAFT_DROPDOWN_WIDTH
+    
+    dropDown:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    UIDropDownMenu_SetWidth(dropDown, width)
+    UIDropDownMenu_SetText(dropDown, "All Slots") 
+    -- Hijack the Button click to show our custom frame
+    local button = _G[dropDown:GetName().."Button"]
+    if button then
+        button:SetScript("OnClick", function()
+            SPF:ToggleCraftMenu()
+            PlaySound(856) -- SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON
+        end)
+        
+        -- Also make the text area clickable
+        local textButton = CreateFrame("Button", nil, dropDown)
+        textButton:SetPoint("TOPLEFT", dropDown, "TOPLEFT")
+        textButton:SetPoint("BOTTOMLEFT", dropDown, "BOTTOMLEFT")
+        textButton:SetPoint("RIGHT", button, "LEFT")
+        textButton:SetScript("OnClick", function()
+            SPF:ToggleCraftMenu()
+            PlaySound(856)
+        end)
+    end
+    
+
 end
 
 
@@ -878,18 +1132,9 @@ local orig_HandleModifiedItemClick = HandleModifiedItemClick
 function HandleModifiedItemClick(link)
     if not link then return end
     if IsModifiedClick("CHATLINK") then
-        local focusedEditBox = nil
-        
-        if SPF.SearchBox and SPF.SearchBox:HasFocus() then
-            focusedEditBox = SPF.SearchBox
-        elseif SPF.CraftSearchBox and SPF.CraftSearchBox:HasFocus() then
-            focusedEditBox = SPF.CraftSearchBox
-        end
-
-        if focusedEditBox then
-            local name = GetItemInfo(link) or link:match("%[([^%]]+)%]")
-            if name then
-                focusedEditBox:Insert(name)
+        local name = GetItemInfo(link) or link:match("%[([^%]]+)%]")
+        if name then
+            if SPF:TryInsertLink(name) then
                 return true
             end
         end
@@ -898,5 +1143,23 @@ function HandleModifiedItemClick(link)
     if orig_HandleModifiedItemClick then
         return orig_HandleModifiedItemClick(link)
     end
+end
+
+-- Hook ChatEdit_InsertLink as fallback (CraftFrame reagents sometimes call this directly)
+local orig_ChatEdit_InsertLink = ChatEdit_InsertLink
+function ChatEdit_InsertLink(text)
+    if not text then return false end
+    
+    local name = GetItemInfo(text) or text:match("%[([^%]]+)%]")
+    if name then
+        if SPF:TryInsertLink(name) then
+             return true
+        end
+    end
+    
+    if orig_ChatEdit_InsertLink then
+        return orig_ChatEdit_InsertLink(text)
+    end
+    return false
 end
 
