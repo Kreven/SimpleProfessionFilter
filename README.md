@@ -32,12 +32,6 @@ A minimalist profession filtering addon for World of Warcraft Classic Era that e
 3. Place it in `World of Warcraft\_classic_era_\Interface\AddOns\`
 4. Restart WoW or reload UI (`/reload`)
 
-### GitHub Installation
-```bash
-cd "World of Warcraft\_classic_era_\Interface\AddOns\"
-git clone https://github.com/YourUsername/SimpleProfessionFilter.git
-```
-
 ## Usage
 
 1. Open any profession window (Blacksmithing, Alchemy, Enchanting, etc.)
@@ -102,3 +96,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **For World of Warcraft Classic Era**  
 *A lightweight, powerful profession filtering solution*
+
