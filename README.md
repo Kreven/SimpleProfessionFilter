@@ -8,21 +8,28 @@ A minimalist profession filtering addon for World of Warcraft Classic Era that e
 - **Search by recipe name** - Find recipes quickly by typing their name
 - **Search by materials** - Type any reagent name to find all recipes that use it
 - **Shift+Click insertion** - Shift+Click any item (bag, chat, recipe) to insert its name into the search box
+  - *New:* Works even if the search box is not focused (frame must be open)
+  - *New:* Automatically replaces current text with the clicked item name
 - **Real-time filtering** - Results update as you type
 - **Clear button** - Quickly clear your search with one click
 
 ### ✨ Advanced Filtering
 - **Skill up filter** - Show only recipes that will increase your skill
 - **Have materials filter** - Show only recipes you have materials for
+- **Enchanting Categories** - Dedicated slot-based filtering (Boots, Bracer, Weapon, etc.) with support for most official WoW languages.
 - **Combined filters** - Use multiple filters together for precise results
+
+### ⚙️ Settings & Persistence
+- **Options Panel** - Integrated into the Blizzard Options menu
+- **Slash Commands** - Use `/spf` to open settings directly
+- **Filter Persistence** - Optional setting to remember your search text and checkbox selections across sessions
+- **Customizable Focus** - Toggle whether Shift+Click works with or without explicit focus
 
 ### 🎨 Clean Interface
 - **Compact design** - Fits seamlessly into the default UI
 
 ### 🔧 Compatibility
 - **Leatrix Plus integration** - Automatically detects and respects Leatrix Plus settings
-- **Works with all professions** - Including Enchanting
-- **Classic Era optimized** - Built specifically for WoW Classic Era (1.15.x)
 
 ## Installation
 
@@ -40,6 +47,7 @@ A minimalist profession filtering addon for World of Warcraft Classic Era that e
 4. Toggle "Have mats" to show only craftable recipes
 5. Click the X button or press ESC to clear your search
 6. **Shift+Click** items in your bag or chat to instantly search for them
+7. Access settings via **Escape > Options > AddOns > Simple Profession Filter** or type `/spf`
 
 ### Examples
 - Type `"copper"` to find all recipes using Copper Bar or Copper Ore
@@ -77,8 +85,8 @@ SimpleProfessionFilter is designed to be lightweight and compatible with most pr
 ## Technical Details
 
 - **Interface Version**: 11508 (Classic Era 1.15.x)
-- **Memory Usage**: ~60 KB
-- **Performance**: Optimized for real-time filtering with minimal overhead
+- **Memory Usage**: ~80 KB
+- **Performance**: High-performance filtering with localized globals and weak-keyed caching
 
 ### Contributing
 Contributions are welcome! Please feel free to submit issues or pull requests.

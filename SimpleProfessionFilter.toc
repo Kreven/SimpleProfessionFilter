@@ -4,5 +4,8 @@
 ## Category: Professions
 ## Author: KrevenRess
 ## Version: 1.0
+## SavedVariables: SimpleProfessionFilterDB
 
+Localization.lua
 SimpleProfessionFilter.lua
+Settings.lua

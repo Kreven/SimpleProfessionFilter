@@ -1,6 +1,15 @@
 local addonName, SPF = ...
 _G[addonName] = SPF
 
+-- Localize Lua functions for performance
+local string_find = string.find
+local string_lower = string.lower
+local table_insert = table.insert
+local ipairs = ipairs
+local pairs = pairs
+local unpack = unpack
+local GetTime = GetTime
+
 -- ============================================================================
 -- Constants & Configuration
 -- ============================================================================
@@ -87,6 +96,7 @@ local DIFFICULTY_COLORS = {
     default = {r=1.0, g=1.0, b=1.0}
 }
 
+
 -- ============================================================================
 -- State Management (Separate states for TradeSkill and Craft)
 -- ============================================================================
@@ -104,7 +114,11 @@ SPF.CraftState = {
     showHaveMats = false
 }
 
--- Craft Categories (Enchanting)
+-- Enchanting Localization
+local L = SPF.L
+
+
+-- Craft Categories (Internal Keys)
 local CRAFT_CATEGORIES = {
     "All",
     "Boots",
@@ -129,7 +143,7 @@ SPF.searchPlaceholder = "Search..."
 -- Utility Functions
 -- ============================================================================
 
-local stripColorCache = {}
+local stripColorCache = setmetatable({}, { __mode = "kv" })
 local function StripColor(text)
     if not text then return "" end
     if stripColorCache[text] then return stripColorCache[text] end
@@ -142,17 +156,26 @@ end
 function SPF:TryInsertLink(text)
     if not text then return false end
     
-    local focusedEditBox = SPF.FocusedEditBox
+    local targetEditBox = SPF.FocusedEditBox
     
-    -- Check for grace period focus
-    if not focusedEditBox and SPF.LastFocusedEditBox and SPF.LastFocusTime then
+    -- If no box is focused, find which profession window is open
+    if not targetEditBox and SimpleProfessionFilterDB.insertWithoutFocus then
+        if TradeSkillFrame and TradeSkillFrame:IsShown() and SPF.SearchBox then
+            targetEditBox = SPF.SearchBox
+        elseif CraftFrame and CraftFrame:IsShown() and SPF.CraftSearchBox then
+            targetEditBox = SPF.CraftSearchBox
+        end
+    end
+    
+    -- Fallback for grace period focus
+    if not targetEditBox and SPF.LastFocusedEditBox and SPF.LastFocusTime then
          if (GetTime() - SPF.LastFocusTime) < 0.5 then
-             focusedEditBox = SPF.LastFocusedEditBox
+             targetEditBox = SPF.LastFocusedEditBox
          end
     end
     
-    if focusedEditBox then
-        focusedEditBox:Insert(text)
+    if targetEditBox then
+        targetEditBox:SetText(text)
         return true
     end
     
@@ -182,14 +205,49 @@ function SPF.Frame:OnEvent(event, arg1)
             SPF:InitCraftUI()
         end
     elseif event == "TRADE_SKILL_SHOW" then
-        SPF.TradeSkillState.filterText = ""
-        if SPF.SearchBox then SPF.SearchBox:SetText("") end
-        stripColorCache = {} -- Clear cache on frame show
+        if not SimpleProfessionFilterDB.rememberFilters then
+            SPF.TradeSkillState.filterText = ""
+            SPF.TradeSkillState.showSkillUp = false
+            SPF.TradeSkillState.showHaveMats = false
+        end
+        
+        -- Sync UI
+        if SPF.SearchBox then 
+            SPF.SearchBox:SetText(SPF.TradeSkillState.filterText or "") 
+        end
+        if SPF.TradeSkillSkillUpCheck then
+            SPF.TradeSkillSkillUpCheck:SetChecked(SPF.TradeSkillState.showSkillUp)
+        end
+        if SPF.TradeSkillHaveMatsCheck then
+            SPF.TradeSkillHaveMatsCheck:SetChecked(SPF.TradeSkillState.showHaveMats)
+        end
+        
+        stripColorCache = {}
         SPF:AdjustTradeSkillLayout()
     elseif event == "CRAFT_SHOW" then
-        SPF.CraftState.filterText = ""
-        if SPF.CraftSearchBox then SPF.CraftSearchBox:SetText("") end
-        stripColorCache = {} -- Clear cache on frame show
+        if not SimpleProfessionFilterDB.rememberFilters then
+            SPF.CraftState.filterText = ""
+            SPF.CraftState.showSkillUp = false
+            SPF.CraftState.showHaveMats = false
+            SPF.CraftState.filterCategory = "All"
+        end
+        
+        -- Sync UI
+        if SPF.CraftSearchBox then 
+            SPF.CraftSearchBox:SetText(SPF.CraftState.filterText or "") 
+        end
+        if SPF.CraftSkillUpCheck then
+            SPF.CraftSkillUpCheck:SetChecked(SPF.CraftState.showSkillUp)
+        end
+        if SPF.CraftHaveMatsCheck then
+            SPF.CraftHaveMatsCheck:SetChecked(SPF.CraftState.showHaveMats)
+        end
+        if SPF.CraftDropDown then
+            local cat = SPF.CraftState.filterCategory or "All"
+            UIDropDownMenu_SetText(SPF.CraftDropDown, L[cat] or cat)
+        end
+        
+        stripColorCache = {}
     end
 end
 SPF.Frame:SetScript("OnEvent", SPF.Frame.OnEvent)
@@ -370,16 +428,21 @@ local function ApplyFilters(numItems, getInfoFunc, getNumReagentsFunc, getReagen
         else
             local match = true
             
+            -- Pre-calculate stripped lower case name for filters
+            local strippedNameL
+            if state.filterText ~= "" or (state.filterCategory and state.filterCategory ~= "All") then
+                strippedNameL = string_lower(StripColor(name))
+            end
 
             -- Search filter
             if state.filterText ~= "" then
-                local nameMatch = name and string.find(StripColor(name):lower(), state.filterText, 1, true)
+                local nameMatch = name and string_find(strippedNameL, state.filterText, 1, true)
                 
                 if not nameMatch and getNumReagentsFunc and getReagentInfoFunc then
                     local numReagents = getNumReagentsFunc(i)
                     for j = 1, numReagents do
                         local reagentName = getReagentInfoFunc(i, j)
-                        if reagentName and string.find(StripColor(reagentName):lower(), state.filterText, 1, true) then
+                        if reagentName and string_find(string_lower(StripColor(reagentName)), state.filterText, 1, true) then
                             nameMatch = true
                             break
                         end
@@ -393,21 +456,29 @@ local function ApplyFilters(numItems, getInfoFunc, getNumReagentsFunc, getReagen
             
             -- Category filter (Craft only)
             if match and state.filterCategory and state.filterCategory ~= "All" then
-                local strippedName = StripColor(name):lower()
-                local cat = state.filterCategory:lower()
+                local catKey = state.filterCategory
                 
-                if cat == "other" then
-                    -- Check against all other categories
+                if catKey == "Other" then
+                    -- Check against all localized slot categories (exclude All and Other)
                     local found = false
-                    for _, c in ipairs(CRAFT_CATEGORIES) do
-                        if c ~= "All" and c ~= "Other" and strippedName:find(c:lower(), 1, true) then
-                            found = true
-                            break
+                    for key, localizedName in pairs(L) do
+                        if key ~= "All" and key ~= "Other" then
+                            if string_find(strippedNameL, string_lower(localizedName), 1, true) then
+                                found = true
+                                break
+                            end
                         end
                     end
                     if found then match = false end
-                elseif not strippedName:find(cat, 1, true) then
-                    match = false
+                else
+                    local localizedMatch = L[catKey]
+                    if localizedMatch then
+                        if not string_find(strippedNameL, string_lower(localizedMatch), 1, true) then
+                            match = false
+                        end
+                    else
+                        match = false -- Should not happen if keys match
+                    end
                 end
             end
             
@@ -423,10 +494,10 @@ local function ApplyFilters(numItems, getInfoFunc, getNumReagentsFunc, getReagen
             
             if match then
                 if currentHeaderIndex and not keepHeader then
-                    table.insert(filteredIndices, currentHeaderIndex)
+                    table_insert(filteredIndices, currentHeaderIndex)
                     keepHeader = true
                 end
-                table.insert(filteredIndices, i)
+                table_insert(filteredIndices, i)
             end
         end
     end
@@ -552,6 +623,7 @@ function SPF:InitTradeSkillUI()
         UpdateTradeSkill,
         ExpandTradeSkillSubClass
     )
+    SPF.TradeSkillSkillUpCheck = skillUp
 
     -- Have Mats Checkbox
     local haveMatsInset = enhanceProfessions and CONSTANTS.CHECKBOX_HIT_INSET_LEATRIX or CONSTANTS.CHECKBOX_HIT_INSET_NORMAL
@@ -568,6 +640,7 @@ function SPF:InitTradeSkillUI()
         UpdateTradeSkill,
         ExpandTradeSkillSubClass
     )
+    SPF.TradeSkillHaveMatsCheck = haveMats
 
     -- Clear focus when clicking outside search box
     if SPF.SearchBox then
@@ -787,6 +860,7 @@ function SPF:InitCraftUI()
         UpdateCraft,
         ExpandCraftSkillLine
     )
+    SPF.CraftSkillUpCheck = skillUp
 
     -- Have Mats Checkbox
     local haveMatsInset = enhanceProfessions and CONSTANTS.CHECKBOX_HIT_INSET_LEATRIX or CONSTANTS.CHECKBOX_HIT_INSET_NORMAL
@@ -803,6 +877,7 @@ function SPF:InitCraftUI()
         UpdateCraft,
         ExpandCraftSkillLine
     )
+    SPF.CraftHaveMatsCheck = haveMats
 
     -- Clear focus when clicking outside search box
     if SPF.CraftSearchBox then
@@ -875,7 +950,8 @@ function SPF:CreateCraftOptionsMenu()
     
     local function Button_OnClick(self)
         SPF.CraftState.filterCategory = self.value
-        UIDropDownMenu_SetText(SPF.CraftDropDown, self.value == "All" and "All Slots" or self.value)
+        local label = L[self.value] or self.value
+        UIDropDownMenu_SetText(SPF.CraftDropDown, label)
         frame:Hide()
         closer:Hide()
         
@@ -906,7 +982,8 @@ function SPF:CreateCraftOptionsMenu()
         -- Text
         local text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         text:SetPoint("LEFT", btn, "LEFT", 18, 0)
-        text:SetText(category == "All" and "All Slots" or category)
+        
+        text:SetText(L[category] or category)
         text:SetJustifyH("LEFT")
         btn.text = text
         
@@ -973,7 +1050,14 @@ function SPF:InitCraftDropDown(parent)
     
     dropDown:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     UIDropDownMenu_SetWidth(dropDown, width)
-    UIDropDownMenu_SetText(dropDown, "All Slots") 
+    
+    local initialLabel = L["All"] or "All Slots"
+    local currentCat = SPF.CraftState.filterCategory
+    if currentCat and currentCat ~= "All" then
+        initialLabel = L[currentCat] or currentCat
+    end
+    
+    UIDropDownMenu_SetText(dropDown, initialLabel)
     -- Hijack the Button click to show our custom frame
     local button = _G[dropDown:GetName().."Button"]
     if button then
@@ -1162,4 +1246,5 @@ function ChatEdit_InsertLink(text)
     end
     return false
 end
+
 
