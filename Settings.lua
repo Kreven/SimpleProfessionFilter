@@ -59,6 +59,7 @@ function SPF:RegisterSettings()
         cb.layoutIndex = GetLayoutIndex()
         cb.bottomPadding = 12
         cb:SetHitRectInsets(0, -cb.text:GetWidth(), 0, -10)
+        cb.HoverBackground = nil
         cb:SetChecked(SimpleProfessionFilterDB[dbKey])
         cb:SetScript("OnClick", function(self)
             SimpleProfessionFilterDB[dbKey] = self:GetChecked()
@@ -69,7 +70,7 @@ function SPF:RegisterSettings()
     -- Setting: Insert without focus
     CreateCheckbox(
         "Shift+Click insert without focus",
-        "Automatically insert item name into the search box even if it's not focused (frame must be open)",
+        "Automatically insert item name into the search box even if it's not focused",
         "insertWithoutFocus"
     )
     

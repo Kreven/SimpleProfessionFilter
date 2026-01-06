@@ -153,30 +153,67 @@ local function StripColor(text)
     return stripped
 end
 
+local function IsWordMatch(source, query)
+    if not source or not query or query == "" then return false end
+    local start = 1
+    while true do
+        local s, e = string_find(source, query, start, true)
+        if not s then return false end
+        -- Word boundary: start of string or preceded by space
+        if s == 1 or source:sub(s-1, s-1) == " " then
+            return true
+        end
+        start = s + 1
+    end
+end
+
 function SPF:TryInsertLink(text)
     if not text then return false end
     
-    local targetEditBox = SPF.FocusedEditBox
+    -- 1. If ANY edit box has keyboard focus, DO NOT hijack it.
+    -- Return false so the original Blizzard function handles the insertion.
+    local currentlyFocused = GetFocusedEditBox and GetFocusedEditBox()
+    if currentlyFocused then return false end
     
-    -- If no box is focused, find which profession window is open
-    if not targetEditBox and SimpleProfessionFilterDB.insertWithoutFocus then
+    -- Fallbacks for specific common boxes if GetFocusedEditBox is not available
+    if (ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()) or 
+       (BrowseName and BrowseName:HasFocus()) then
+        return false
+    end
+
+    -- Auctionator Compatibility
+    if AuctionatorShoppingFrame and AuctionatorShoppingFrame:IsShown() and 
+       AuctionatorShoppingFrame.SearchOptions and AuctionatorShoppingFrame.SearchOptions.SearchString and
+       AuctionatorShoppingFrame.SearchOptions.SearchString:HasFocus() then
+        return false
+    end
+    
+    if AuctionatorCancellingFrame and AuctionatorCancellingFrame:IsShown() and 
+       AuctionatorCancellingFrame.SearchFilter and AuctionatorCancellingFrame.SearchFilter:HasFocus() then
+        return false
+    end
+
+    -- 2. If NO box is focused, check for redirection to SPF search box
+    if SimpleProfessionFilterDB.insertWithoutFocus then
+        local targetEditBox
         if TradeSkillFrame and TradeSkillFrame:IsShown() and SPF.SearchBox then
             targetEditBox = SPF.SearchBox
         elseif CraftFrame and CraftFrame:IsShown() and SPF.CraftSearchBox then
             targetEditBox = SPF.CraftSearchBox
         end
+        
+        if targetEditBox then
+            targetEditBox:SetText(text)
+            return true
+        end
     end
     
-    -- Fallback for grace period focus
-    if not targetEditBox and SPF.LastFocusedEditBox and SPF.LastFocusTime then
+    -- 3. Grace period fallback (if user just clicked away)
+    if SPF.LastFocusedEditBox and SPF.LastFocusTime then
          if (GetTime() - SPF.LastFocusTime) < 0.5 then
-             targetEditBox = SPF.LastFocusedEditBox
+             SPF.LastFocusedEditBox:SetText(text)
+             return true
          end
-    end
-    
-    if targetEditBox then
-        targetEditBox:SetText(text)
-        return true
     end
     
     return false
@@ -436,13 +473,13 @@ local function ApplyFilters(numItems, getInfoFunc, getNumReagentsFunc, getReagen
 
             -- Search filter
             if state.filterText ~= "" then
-                local nameMatch = name and string_find(strippedNameL, state.filterText, 1, true)
+                local nameMatch = name and IsWordMatch(strippedNameL, state.filterText)
                 
                 if not nameMatch and getNumReagentsFunc and getReagentInfoFunc then
                     local numReagents = getNumReagentsFunc(i)
                     for j = 1, numReagents do
                         local reagentName = getReagentInfoFunc(i, j)
-                        if reagentName and string_find(string_lower(StripColor(reagentName)), state.filterText, 1, true) then
+                        if reagentName and IsWordMatch(string_lower(StripColor(reagentName)), state.filterText) then
                             nameMatch = true
                             break
                         end
@@ -463,7 +500,7 @@ local function ApplyFilters(numItems, getInfoFunc, getNumReagentsFunc, getReagen
                     local found = false
                     for key, localizedName in pairs(L) do
                         if key ~= "All" and key ~= "Other" then
-                            if string_find(strippedNameL, string_lower(localizedName), 1, true) then
+                            if IsWordMatch(strippedNameL, string_lower(localizedName)) then
                                 found = true
                                 break
                             end
@@ -473,7 +510,7 @@ local function ApplyFilters(numItems, getInfoFunc, getNumReagentsFunc, getReagen
                 else
                     local localizedMatch = L[catKey]
                     if localizedMatch then
-                        if not string_find(strippedNameL, string_lower(localizedMatch), 1, true) then
+                        if not IsWordMatch(strippedNameL, string_lower(localizedMatch)) then
                             match = false
                         end
                     else
@@ -911,6 +948,13 @@ function SPF:InitCraftUI()
     
     -- Init DropDown
     SPF:InitCraftDropDown(parent)
+
+    CraftFrame:HookScript("OnHide", function()
+        if SPF.CraftOptionsMenu then
+            SPF.CraftOptionsMenu:Hide()
+            SPF.CraftOptionsMenu.closer:Hide()
+        end
+    end)
 end
 
 
