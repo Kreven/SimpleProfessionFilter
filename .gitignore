@@ -20,3 +20,5 @@ desktop.ini
 # Temporary files
 *.tmp
 *.temp
+
+Debug_Vanilla.lua

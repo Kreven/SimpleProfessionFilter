@@ -3,6 +3,7 @@ local addonName, SPF = ...
 -- Default settings
 local DEFAULTS = {
     insertWithoutFocus = true,
+    insertWithoutFocusAlt = true,
     rememberFilters = false,
 }
 
@@ -74,6 +75,13 @@ function SPF:RegisterSettings()
         "insertWithoutFocus"
     )
     
+    -- Setting: Insert without focus (Alt)
+    CreateCheckbox(
+        "Shift+Alt+Click insert without focus",
+        "Automatically insert item name using Shift+Alt+Click, ignoring the above setting",
+        "insertWithoutFocusAlt"
+    )
+    
     -- Setting: Remember active filters
     CreateCheckbox(
         "Remember active filters",
@@ -98,14 +106,18 @@ EventUtil.ContinueOnAddOnLoaded(addonName, function()
     SimpleProfessionFilterDB.CraftState = SimpleProfessionFilterDB.CraftState or {}
     
     -- Merge current state with DB
-    for k, v in pairs(SPF.TradeSkillState) do
-        if SimpleProfessionFilterDB.TradeSkillState[k] == nil then
-            SimpleProfessionFilterDB.TradeSkillState[k] = v
+    if SPF.TradeSkillState then
+        for k, v in pairs(SPF.TradeSkillState) do
+            if SimpleProfessionFilterDB.TradeSkillState[k] == nil then
+                SimpleProfessionFilterDB.TradeSkillState[k] = v
+            end
         end
     end
-    for k, v in pairs(SPF.CraftState) do
-        if SimpleProfessionFilterDB.CraftState[k] == nil then
-            SimpleProfessionFilterDB.CraftState[k] = v
+    if SPF.CraftState then
+        for k, v in pairs(SPF.CraftState) do
+            if SimpleProfessionFilterDB.CraftState[k] == nil then
+                SimpleProfessionFilterDB.CraftState[k] = v
+            end
         end
     end
     
