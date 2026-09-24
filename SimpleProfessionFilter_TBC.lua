@@ -24,7 +24,9 @@ local LAYOUTS = {
         HAVE_MATS_OFFSET_X = 0,
         HAVE_MATS_OFFSET_Y = 0,
         SKILLUP_OFFSET_X = 72,
-        SKILLUP_OFFSET_Y = 0,
+        SKILLUP_OFFSET_Y = 6,
+        FAVORITES_OFFSET_X = -20,
+        FAVORITES_OFFSET_Y = -14,
         RANK_FRAME_X = 70,
         RANK_FRAME_Y = -16,
         RANK_FRAME_WIDTH = 254,
@@ -34,10 +36,12 @@ local LAYOUTS = {
         CRAFT_SEARCH_BOX_X = 76,
         CRAFT_SEARCH_BOX_Y = -35,
         CRAFT_SEARCH_BOX_WIDTH = 270,
-        CRAFT_HAVE_MATS_OFFSET_X = -290,
-        CRAFT_HAVE_MATS_OFFSET_Y = -33,
-        CRAFT_SKILLUP_OFFSET_X = 72,
+        CRAFT_HAVE_MATS_OFFSET_X = -320,
+        CRAFT_HAVE_MATS_OFFSET_Y = -35,
+        CRAFT_SKILLUP_OFFSET_X = 60,
         CRAFT_SKILLUP_OFFSET_Y = 0,
+        CRAFT_FAVORITES_OFFSET_X = 44,
+        CRAFT_FAVORITES_OFFSET_Y = 0,
         CRAFT_RANK_FRAME_X = 70,
         CRAFT_RANK_FRAME_Y = -16,
         CRAFT_RANK_FRAME_WIDTH = 254,
@@ -47,10 +51,12 @@ local LAYOUTS = {
         -- TradeSkill positions
         SEARCH_BOX_X = 83,
         SEARCH_BOX_Y = -44,
-        HAVE_MATS_OFFSET_X = 10,
+        HAVE_MATS_OFFSET_X = 5,
         HAVE_MATS_OFFSET_Y = 0,
-        SKILLUP_OFFSET_X = 80,
+        SKILLUP_OFFSET_X = 75,
         SKILLUP_OFFSET_Y = 0,
+        FAVORITES_OFFSET_X = 43,
+        FAVORITES_OFFSET_Y = 0,
         RANK_FRAME_X = 70,
         RANK_FRAME_Y = -16,
         RANK_FRAME_WIDTH = 584,
@@ -60,10 +66,12 @@ local LAYOUTS = {
         CRAFT_SEARCH_BOX_X = 78,
         CRAFT_SEARCH_BOX_Y = -42,
         CRAFT_SEARCH_BOX_WIDTH = 270,
-        CRAFT_HAVE_MATS_OFFSET_X = 7,
+        CRAFT_HAVE_MATS_OFFSET_X = 3,
         CRAFT_HAVE_MATS_OFFSET_Y = -2,
-        CRAFT_SKILLUP_OFFSET_X = 76,
+        CRAFT_SKILLUP_OFFSET_X = 75,
         CRAFT_SKILLUP_OFFSET_Y = 0,
+        CRAFT_FAVORITES_OFFSET_X = 43,
+        CRAFT_FAVORITES_OFFSET_Y = 0,
         CRAFT_RANK_FRAME_X = 70,
         CRAFT_RANK_FRAME_Y = -16,
         CRAFT_RANK_FRAME_WIDTH = 584,
@@ -90,14 +98,176 @@ local DIFFICULTY_COLORS = {
 }
 
 -- ============================================================================
--- State
+-- State & Favorite Management
 -- ============================================================================
 
 local showSkillUp = false
+local showFavorites = false
+
+function SPF:GetCurrentProfessionName(isCraft)
+    if isCraft then
+        if CraftRankFrameSkillName and CraftRankFrameSkillName:GetText() and CraftRankFrameSkillName:GetText() ~= "" then
+            return CraftRankFrameSkillName:GetText()
+        end
+        if GetCraftDisplaySkillLine then
+            local name = GetCraftDisplaySkillLine()
+            if name and name ~= "" then return name end
+        end
+        return "Craft"
+    else
+        if GetTradeSkillLine then
+            local name = GetTradeSkillLine()
+            if name and name ~= "" then return name end
+        end
+        if TradeSkillRankFrameSkillName and TradeSkillRankFrameSkillName:GetText() and TradeSkillRankFrameSkillName:GetText() ~= "" then
+            return TradeSkillRankFrameSkillName:GetText()
+        end
+        return "TradeSkill"
+    end
+end
+
+function SPF:IsFavorite(name, isCraft)
+    if not name or name == "" then return false end
+    if not SimpleProfessionFilterDB_TBC or not SimpleProfessionFilterDB_TBC.favorites then return false end
+    local prof = SPF:GetCurrentProfessionName(isCraft)
+    return (SimpleProfessionFilterDB_TBC.favorites[prof] and SimpleProfessionFilterDB_TBC.favorites[prof][name]) == true
+end
+
+function SPF:ToggleFavorite(name, isCraft)
+    if not name or name == "" then return false end
+    SimpleProfessionFilterDB_TBC = SimpleProfessionFilterDB_TBC or {}
+    SimpleProfessionFilterDB_TBC.favorites = SimpleProfessionFilterDB_TBC.favorites or {}
+    local prof = SPF:GetCurrentProfessionName(isCraft)
+    SimpleProfessionFilterDB_TBC.favorites[prof] = SimpleProfessionFilterDB_TBC.favorites[prof] or {}
+
+    local isFav = not SimpleProfessionFilterDB_TBC.favorites[prof][name]
+    if isFav then
+        SimpleProfessionFilterDB_TBC.favorites[prof][name] = true
+    else
+        SimpleProfessionFilterDB_TBC.favorites[prof][name] = nil
+    end
+    return isFav
+end
 
 -- Original Blizzard API reference
 local OriginalGetTradeSkillInfo = GetTradeSkillInfo
 local OriginalGetCraftInfo = GetCraftInfo
+
+local function GetOrCreateSkillStar(button, isCraft)
+    if not button.spfStar then
+        local star = button:CreateTexture(nil, "OVERLAY")
+        star:SetTexture("Interface\\COMMON\\ReputationStar")
+        star:SetTexCoord(0, 0.5, 0, 0.5)
+        button.spfStar = star
+    end
+    button.spfStar:SetSize(13, 13)
+    button.spfStar:ClearAllPoints()
+    local isCraftButton = (isCraft == true) or (button:GetName() and button:GetName():find("^Craft") ~= nil)
+    if isCraftButton then
+        button.spfStar:SetPoint("LEFT", button, "LEFT", -7, 2)
+    else
+        button.spfStar:SetPoint("LEFT", button, "LEFT", 7, 1)
+    end
+    return button.spfStar
+end
+
+local function UpdateTradeSkillFavoriteButton()
+    if not SPF.TradeSkillFavoriteButton then return end
+    local selectedIndex = GetTradeSkillSelectionIndex()
+    if selectedIndex and selectedIndex > 0 then
+        local name, skillType = OriginalGetTradeSkillInfo(selectedIndex)
+        if skillType and skillType ~= "header" then
+            SPF.TradeSkillFavoriteButton:Show()
+            local isFav = SPF:IsFavorite(name, false)
+            if isFav then
+                SPF.TradeSkillFavoriteButton.icon:SetTexCoord(0, 0.5, 0, 0.5)
+                SPF.TradeSkillFavoriteButton.icon:SetAlpha(1.0)
+                SPF.TradeSkillFavoriteButton.icon:SetVertexColor(1.0, 1.0, 1.0)
+            else
+                SPF.TradeSkillFavoriteButton.icon:SetTexCoord(0.5, 1.0, 0, 0.5)
+                SPF.TradeSkillFavoriteButton.icon:SetAlpha(0.6)
+                SPF.TradeSkillFavoriteButton.icon:SetVertexColor(0.8, 0.8, 0.8)
+            end
+        else
+            SPF.TradeSkillFavoriteButton:Hide()
+        end
+    else
+        SPF.TradeSkillFavoriteButton:Hide()
+    end
+end
+
+local function UpdateTradeSkillVisibleIcons()
+    for i = 1, TRADE_SKILLS_DISPLAYED do
+        local skillButton = _G["TradeSkillSkill"..i]
+        if skillButton and skillButton:IsShown() then
+            local star = GetOrCreateSkillStar(skillButton, false)
+            local skillIndex = skillButton:GetID()
+            if skillIndex and skillIndex > 0 then
+                local name, skillType = OriginalGetTradeSkillInfo(skillIndex)
+                if skillType and skillType ~= "header" and SPF:IsFavorite(name, false) then
+                    star:Show()
+                else
+                    star:Hide()
+                end
+            else
+                star:Hide()
+            end
+        else
+            if skillButton and skillButton.spfStar then
+                skillButton.spfStar:Hide()
+            end
+        end
+    end
+end
+
+local function UpdateCraftFavoriteButton()
+    if not SPF.CraftFavoriteButton then return end
+    local selectedIndex = GetCraftSelectionIndex()
+    if selectedIndex and selectedIndex > 0 then
+        local name, _, craftType = OriginalGetCraftInfo(selectedIndex)
+        if craftType and craftType ~= "header" then
+            SPF.CraftFavoriteButton:Show()
+            local isFav = SPF:IsFavorite(name, true)
+            if isFav then
+                SPF.CraftFavoriteButton.icon:SetTexCoord(0, 0.5, 0, 0.5)
+                SPF.CraftFavoriteButton.icon:SetAlpha(1.0)
+                SPF.CraftFavoriteButton.icon:SetVertexColor(1.0, 1.0, 1.0)
+            else
+                SPF.CraftFavoriteButton.icon:SetTexCoord(0.5, 1.0, 0, 0.5)
+                SPF.CraftFavoriteButton.icon:SetAlpha(0.6)
+                SPF.CraftFavoriteButton.icon:SetVertexColor(0.8, 0.8, 0.8)
+            end
+        else
+            SPF.CraftFavoriteButton:Hide()
+        end
+    else
+        SPF.CraftFavoriteButton:Hide()
+    end
+end
+
+local function UpdateCraftVisibleIcons()
+    for i = 1, CRAFTS_DISPLAYED do
+        local craftButton = _G["Craft"..i]
+        if craftButton and craftButton:IsShown() then
+            local star = GetOrCreateSkillStar(craftButton, true)
+            local skillIndex = craftButton:GetID()
+            if skillIndex and skillIndex > 0 then
+                local name, _, craftType = OriginalGetCraftInfo(skillIndex)
+                if craftType and craftType ~= "header" and SPF:IsFavorite(name, true) then
+                    star:Show()
+                else
+                    star:Hide()
+                end
+            else
+                star:Hide()
+            end
+        else
+            if craftButton and craftButton.spfStar then
+                craftButton.spfStar:Hide()
+            end
+        end
+    end
+end
 
 -- ============================================================================
 -- Core Filtering Logic
@@ -106,7 +276,12 @@ local OriginalGetCraftInfo = GetCraftInfo
 -- Hook TradeSkillFrame_Update to hide trivial recipes after Blizzard renders them
 local function HookTradeSkillFrameUpdate()
     hooksecurefunc("TradeSkillFrame_Update", function()
-        if not showSkillUp then return end
+        UpdateTradeSkillFavoriteButton()
+        
+        if not showSkillUp and not showFavorites then
+            UpdateTradeSkillVisibleIcons()
+            return
+        end
         
         local numTradeSkills = GetNumTradeSkills()
         local skillOffset = FauxScrollFrame_GetOffset(TradeSkillListScrollFrame)
@@ -122,13 +297,19 @@ local function HookTradeSkillFrameUpdate()
             if skillType == "header" then
                 currentHeaderIndex = i
                 headerHasVisibleChildren[i] = false
-                -- Temporarily add header, we'll remove it later if it has no children
                 table.insert(visibleItems, {index = i, isHeader = true})
-            elseif skillType and skillType ~= "trivial" and (not numSkillUps or numSkillUps > 0) then
-                -- Non-trivial recipe
-                table.insert(visibleItems, {index = i, isHeader = false})
-                if currentHeaderIndex then
-                    headerHasVisibleChildren[currentHeaderIndex] = true
+            else
+                local isNotTrivial = (skillType ~= "trivial") and (not numSkillUps or numSkillUps > 0)
+                local isFav = SPF:IsFavorite(name, false)
+                
+                local passSkillUp = (not showSkillUp) or isNotTrivial
+                local passFavorites = (not showFavorites) or isFav
+                
+                if passSkillUp and passFavorites then
+                    table.insert(visibleItems, {index = i, isHeader = false})
+                    if currentHeaderIndex then
+                        headerHasVisibleChildren[currentHeaderIndex] = true
+                    end
                 end
             end
         end
@@ -170,30 +351,37 @@ local function HookTradeSkillFrameUpdate()
             end
         end
         
+        -- If no items visible, hide highlight
+        if #filteredItems == 0 and TradeSkillHighlightFrame then
+            TradeSkillHighlightFrame:Hide()
+        end
+
         -- Third pass: display filtered items and hide the rest
+        if TradeSkillHighlightFrame then
+            TradeSkillHighlightFrame:Hide()
+        end
+
         for i = 1, TRADE_SKILLS_DISPLAYED do
             local skillButton = _G["TradeSkillSkill"..i]
             if skillButton then
                 local item = filteredItems[i + skillOffset]
                 if item then
-                    -- Show this button with the filtered item's data
                     local skillIndex = item.index
                     local name, skillType, numAvailable, isExpanded = OriginalGetTradeSkillInfo(skillIndex)
                     
                     skillButton:SetID(skillIndex)
                     skillButton:Show()
-                    
-                    -- Set button width
                     skillButton:SetWidth(293)
                     
-                    -- Set color
                     local color = TradeSkillTypeColor[skillType]
                     if color then
                         skillButton:SetNormalFontObject(color.font)
                     end
                     
-                    -- Handle headers vs recipes
                     if skillType == "header" then
+                        if skillButton.spfStar then
+                            skillButton.spfStar:Hide()
+                        end
                         skillButton:SetWidth(293)
                         skillButton:SetText(name)
                         if isExpanded then
@@ -207,13 +395,20 @@ local function HookTradeSkillFrameUpdate()
                         skillButton:SetWidth(293)
                         skillButton:ClearNormalTexture()
                         _G["TradeSkillSkill"..i.."Highlight"]:SetTexture("")
-                        if numAvailable == 0 then
-                            skillButton:SetText(" "..name)
+
+                        local star = GetOrCreateSkillStar(skillButton, false)
+                        if SPF:IsFavorite(name, false) then
+                            star:Show()
                         else
-                            skillButton:SetText(" "..name.." ["..numAvailable.."]")
+                            star:Hide()
+                        end
+
+                        if numAvailable == 0 then
+                            skillButton:SetText(" " .. name)
+                        else
+                            skillButton:SetText(" " .. name .. " [" .. numAvailable .. "]")
                         end
                         
-                        -- Handle highlight
                         if GetTradeSkillSelectionIndex() == skillIndex then
                             TradeSkillHighlightFrame:ClearAllPoints()
                             TradeSkillHighlightFrame:SetPoint("TOPLEFT", "TradeSkillSkill"..i, "TOPLEFT", 0, 0)
@@ -224,7 +419,9 @@ local function HookTradeSkillFrameUpdate()
                         end
                     end
                 else
-                    -- Hide unused buttons
+                    if skillButton.spfStar then
+                        skillButton.spfStar:Hide()
+                    end
                     skillButton:Hide()
                 end
             end
@@ -255,7 +452,13 @@ end
 -- Hook CraftFrame_Update
 local function HookCraftFrameUpdate()
     hooksecurefunc("CraftFrame_Update", function()
-        if not showSkillUp and (not SPF_CraftSearchInputBox or SPF_CraftSearchInputBox:GetText() == "" or SPF_CraftSearchInputBox:GetText() == "Search") then return end
+        UpdateCraftFavoriteButton()
+
+        local hasSearch = SPF_CraftSearchInputBox and SPF_CraftSearchInputBox:GetText() ~= "" and SPF_CraftSearchInputBox:GetText() ~= "Search"
+        if not showSkillUp and not showFavorites and not hasSearch then
+            UpdateCraftVisibleIcons()
+            return
+        end
         
         local numCrafts = GetNumCrafts()
         local craftOffset = FauxScrollFrame_GetOffset(CraftListScrollFrame)
@@ -283,12 +486,16 @@ local function HookCraftFrameUpdate()
             end
             
             local isNotTrivial = craftType ~= "trivial"
+            local isFav = SPF:IsFavorite(name, true)
+            
+            local passSkillUp = (not showSkillUp) or isNotTrivial
+            local passFavorites = (not showFavorites) or isFav
             
             if craftType == "header" then
                 currentHeaderIndex = i
                 headerHasVisibleChildren[i] = false
                 table.insert(visibleItems, {index = i, isHeader = true})
-            elseif matchesSearch and (not showSkillUp or isNotTrivial) then
+            elseif matchesSearch and passSkillUp and passFavorites then
                 table.insert(visibleItems, {index = i, isHeader = false})
                 if currentHeaderIndex then
                     headerHasVisibleChildren[currentHeaderIndex] = true
@@ -336,11 +543,15 @@ local function HookCraftFrameUpdate()
         end
 
         -- If no items visible, hide details
-        if #filteredItems == 0 then
+        if #filteredItems == 0 and CraftHighlightFrame then
             CraftHighlightFrame:Hide()
         end
 
         -- Third pass: display
+        if CraftHighlightFrame then
+            CraftHighlightFrame:Hide()
+        end
+
         for i = 1, CRAFTS_DISPLAYED do
             local craftButton = _G["Craft"..i]
             if craftButton then
@@ -362,6 +573,9 @@ local function HookCraftFrameUpdate()
                     end
                     
                     if craftType == "header" then
+                        if craftButton.spfStar then
+                            craftButton.spfStar:Hide()
+                        end
                         craftButton:SetWidth(293)
                         craftButton:SetText(name)
                         if isExpanded then
@@ -375,10 +589,18 @@ local function HookCraftFrameUpdate()
                         craftButton:SetWidth(293)
                         craftButton:ClearNormalTexture()
                         _G["Craft"..i.."Highlight"]:SetTexture("")
-                        if numAvail == 0 then
-                            craftButton:SetText(" "..name)
+
+                        local star = GetOrCreateSkillStar(craftButton, true)
+                        if SPF:IsFavorite(name, true) then
+                            star:Show()
                         else
-                            craftButton:SetText(" "..name.." ["..numAvail.."]")
+                            star:Hide()
+                        end
+
+                        if numAvail == 0 then
+                            craftButton:SetText(" " .. name)
+                        else
+                            craftButton:SetText(" " .. name .. " [" .. numAvail .. "]")
                         end
                         
                         -- Handle highlight
@@ -392,6 +614,9 @@ local function HookCraftFrameUpdate()
                         end
                     end
                 else
+                    if craftButton.spfStar then
+                        craftButton.spfStar:Hide()
+                    end
                     craftButton:Hide()
                 end
             end
@@ -589,6 +814,19 @@ local function PositionHaveMatsCheckbox()
     local layout = GetLayout()
     TradeSkillFrameAvailableFilterCheckButton:ClearAllPoints()
     TradeSkillFrameAvailableFilterCheckButton:SetPoint("LEFT", TradeSearchInputBox, "RIGHT", layout.HAVE_MATS_OFFSET_X, layout.HAVE_MATS_OFFSET_Y)
+    
+    local text = _G["TradeSkillFrameAvailableFilterCheckButtonText"]
+    if text then
+        text:SetWordWrap(true)
+        text:SetJustifyH("LEFT")
+        if not IsEnhanceProfessionsActive() then
+            text:SetWidth(54)
+            TradeSkillFrameAvailableFilterCheckButton:SetHitRectInsets(0, -54, 0, 0)
+        else
+            text:SetWidth(75)
+            TradeSkillFrameAvailableFilterCheckButton:SetHitRectInsets(0, -75, 0, 0)
+        end
+    end
 end
 
 local function AdjustRankFrame()
@@ -656,7 +894,114 @@ local function CreateSkillUpCheckbox()
         end
     end)
     
+    checkbox:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Skill Up", 1, 0.82, 0)
+        GameTooltip:AddLine("Filter list to show only recipes that can grant skill points.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    checkbox:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    
     return checkbox
+end
+
+local function CreateFavoritesCheckbox()
+    if not SPF.SkillUpCheckbox then return end
+    
+    local layout = GetLayout()
+    local checkbox = CreateFrame("CheckButton", "SPF_TradeSkillFavoritesCheck", TradeSkillFrame, "UICheckButtonTemplate")
+    checkbox:SetSize(CHECKBOX_SIZE, CHECKBOX_SIZE)
+    
+    checkbox:SetPoint("LEFT", SPF.SkillUpCheckbox, "RIGHT", layout.FAVORITES_OFFSET_X, layout.FAVORITES_OFFSET_Y)
+    checkbox:SetFrameLevel(TradeSkillFrame:GetFrameLevel() + 10)
+    
+    checkbox:SetHitRectInsets(0, -20, 0, 0)
+    
+    local text = _G[checkbox:GetName().."Text"]
+    text:SetText("Fav")
+    text:SetFontObject(GameFontNormalSmall)
+    
+    checkbox:SetScript("OnClick", function(self)
+        showFavorites = self:GetChecked()
+        
+        if TradeSkillFrame_Update then
+            TradeSkillFrame_Update()
+        end
+    end)
+    
+    checkbox:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Favorites", 1, 0.82, 0)
+        GameTooltip:AddLine("Filter list to show only favorite recipes.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    checkbox:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    
+    return checkbox
+end
+
+local function CreateTradeSkillFavoriteButton()
+    if not TradeSkillDetailScrollChildFrame then return end
+    
+    local button = CreateFrame("Button", "SPF_TradeSkillFavoriteButton", TradeSkillDetailScrollChildFrame)
+    button:SetSize(20, 20)
+    button:SetPoint("TOPRIGHT", TradeSkillDetailScrollChildFrame, "TOPRIGHT", -12, -12)
+    
+    local icon = button:CreateTexture(nil, "ARTWORK")
+    icon:SetAllPoints()
+    icon:SetTexture("Interface\\COMMON\\ReputationStar")
+    icon:SetTexCoord(0.5, 1.0, 0, 0.5)
+    button.icon = icon
+    
+    local highlight = button:CreateTexture(nil, "HIGHLIGHT")
+    highlight:SetAllPoints()
+    highlight:SetTexture("Interface\\COMMON\\ReputationStar")
+    highlight:SetTexCoord(0, 0.5, 0, 0.5)
+    highlight:SetAlpha(0.3)
+    
+    button:SetScript("OnEnter", function(self)
+        local selectedIndex = GetTradeSkillSelectionIndex()
+        if not selectedIndex or selectedIndex == 0 then return end
+        local skillName, skillType = OriginalGetTradeSkillInfo(selectedIndex)
+        if not skillName or skillType == "header" then return end
+        
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        local isFav = SPF:IsFavorite(skillName, false)
+        if isFav then
+            GameTooltip:SetText("Remove from Favorites", 1, 0.82, 0)
+        else
+            GameTooltip:SetText("Add to Favorites", 1, 1, 1)
+        end
+        GameTooltip:Show()
+    end)
+    
+    button:SetScript("OnLeave", function(self)
+        GameTooltip:Hide()
+    end)
+    
+    button:SetScript("OnClick", function(self)
+        local selectedIndex = GetTradeSkillSelectionIndex()
+        if not selectedIndex or selectedIndex == 0 then return end
+        local skillName, skillType = OriginalGetTradeSkillInfo(selectedIndex)
+        if not skillName or skillType == "header" then return end
+        
+        SPF:ToggleFavorite(skillName, false)
+        
+        if GameTooltip:IsOwned(self) then
+            self:GetScript("OnEnter")(self)
+        end
+        
+        if TradeSkillFrame_Update then
+            TradeSkillFrame_Update()
+        end
+    end)
+    
+    button:Hide()
+    return button
 end
 
 local function PositionCraftSearchBox()
@@ -673,6 +1018,19 @@ local function PositionCraftHaveMatsCheckbox()
     local layout = GetLayout()
     CraftFrameAvailableFilterCheckButton:ClearAllPoints()
     CraftFrameAvailableFilterCheckButton:SetPoint("LEFT", SPF_CraftSearchInputBox, "RIGHT", layout.CRAFT_HAVE_MATS_OFFSET_X, layout.CRAFT_HAVE_MATS_OFFSET_Y)
+    
+    local text = _G["CraftFrameAvailableFilterCheckButtonText"]
+    if text then
+        text:SetWordWrap(true)
+        text:SetJustifyH("LEFT")
+        if not IsEnhanceProfessionsActive() then
+            text:SetWidth(54)
+            CraftFrameAvailableFilterCheckButton:SetHitRectInsets(0, -54, 0, 0)
+        else
+            text:SetWidth(75)
+            CraftFrameAvailableFilterCheckButton:SetHitRectInsets(0, -75, 0, 0)
+        end
+    end
 end
 
 local function AdjustCraftRankFrame()
@@ -740,7 +1098,114 @@ local function CreateCraftSkillUpCheckbox()
         end
     end)
     
+    checkbox:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Skill Up", 1, 0.82, 0)
+        GameTooltip:AddLine("Filter list to show only recipes that can grant skill points.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    checkbox:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    
     return checkbox
+end
+
+local function CreateCraftFavoritesCheckbox()
+    if not SPF.CraftSkillUpCheckbox then return end
+    
+    local layout = GetLayout()
+    local checkbox = CreateFrame("CheckButton", "SPF_CraftFavoritesCheck", CraftFrame, "UICheckButtonTemplate")
+    checkbox:SetSize(CHECKBOX_SIZE, CHECKBOX_SIZE)
+    
+    checkbox:SetPoint("LEFT", SPF.CraftSkillUpCheckbox, "RIGHT", layout.CRAFT_FAVORITES_OFFSET_X, layout.CRAFT_FAVORITES_OFFSET_Y)
+    checkbox:SetFrameLevel(CraftFrame:GetFrameLevel() + 10)
+    
+    checkbox:SetHitRectInsets(0, -20, 0, 0)
+    
+    local text = _G[checkbox:GetName().."Text"]
+    text:SetText("Fav")
+    text:SetFontObject(GameFontNormalSmall)
+    
+    checkbox:SetScript("OnClick", function(self)
+        showFavorites = self:GetChecked()
+        
+        if CraftFrame_Update then
+            CraftFrame_Update()
+        end
+    end)
+    
+    checkbox:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Favorites", 1, 0.82, 0)
+        GameTooltip:AddLine("Filter list to show only favorite recipes.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    checkbox:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    
+    return checkbox
+end
+
+local function CreateCraftFavoriteButton()
+    if not CraftDetailScrollChildFrame then return end
+    
+    local button = CreateFrame("Button", "SPF_CraftFavoriteButton", CraftDetailScrollChildFrame)
+    button:SetSize(20, 20)
+    button:SetPoint("TOPRIGHT", CraftDetailScrollChildFrame, "TOPRIGHT", -12, -12)
+    
+    local icon = button:CreateTexture(nil, "ARTWORK")
+    icon:SetAllPoints()
+    icon:SetTexture("Interface\\COMMON\\ReputationStar")
+    icon:SetTexCoord(0.5, 1.0, 0, 0.5)
+    button.icon = icon
+    
+    local highlight = button:CreateTexture(nil, "HIGHLIGHT")
+    highlight:SetAllPoints()
+    highlight:SetTexture("Interface\\COMMON\\ReputationStar")
+    highlight:SetTexCoord(0, 0.5, 0, 0.5)
+    highlight:SetAlpha(0.3)
+    
+    button:SetScript("OnEnter", function(self)
+        local selectedIndex = GetCraftSelectionIndex()
+        if not selectedIndex or selectedIndex == 0 then return end
+        local craftName, _, craftType = OriginalGetCraftInfo(selectedIndex)
+        if not craftName or craftType == "header" then return end
+        
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        local isFav = SPF:IsFavorite(craftName, true)
+        if isFav then
+            GameTooltip:SetText("Remove from Favorites", 1, 0.82, 0)
+        else
+            GameTooltip:SetText("Add to Favorites", 1, 1, 1)
+        end
+        GameTooltip:Show()
+    end)
+    
+    button:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    
+    button:SetScript("OnClick", function(self)
+        local selectedIndex = GetCraftSelectionIndex()
+        if not selectedIndex or selectedIndex == 0 then return end
+        local craftName, _, craftType = OriginalGetCraftInfo(selectedIndex)
+        if not craftName or craftType == "header" then return end
+        
+        SPF:ToggleFavorite(craftName, true)
+        
+        if GameTooltip:IsOwned(self) then
+            self:GetScript("OnEnter")(self)
+        end
+        
+        if CraftFrame_Update then
+            CraftFrame_Update()
+        end
+    end)
+    
+    button:Hide()
+    return button
 end
 
 local function InitTradeSkillUI()
@@ -759,7 +1224,9 @@ local function InitTradeSkillUI()
     
     -- Create custom UI
     SPF.SkillUpCheckbox = CreateSkillUpCheckbox()
+    SPF.FavoritesCheckbox = CreateFavoritesCheckbox()
     SPF.ClearSearchButton = CreateClearSearchButton()
+    SPF.TradeSkillFavoriteButton = CreateTradeSkillFavoriteButton()
 end
 
 local function InitCraftUI()
@@ -775,6 +1242,8 @@ local function InitCraftUI()
     SPF.CraftSearchBox = CreateCraftSearchBox()
     SPF.CraftClearSearchButton = CreateCraftClearSearchButton()
     SPF.CraftSkillUpCheckbox = CreateCraftSkillUpCheckbox()
+    SPF.CraftFavoritesCheckbox = CreateCraftFavoritesCheckbox()
+    SPF.CraftFavoriteButton = CreateCraftFavoriteButton()
     
     -- Position native and custom UI elements
     PositionCraftSearchBox()
@@ -789,18 +1258,26 @@ end
 local function OnTradeSkillShow()
     -- Always reset filter when opening
     showSkillUp = false
+    showFavorites = false
     
     if SPF.SkillUpCheckbox then
-        SPF.SkillUpCheckbox:SetChecked(showSkillUp)
+        SPF.SkillUpCheckbox:SetChecked(false)
+    end
+    if SPF.FavoritesCheckbox then
+        SPF.FavoritesCheckbox:SetChecked(false)
     end
 end
 
 local function OnCraftShow()
     -- Always reset filter when opening
     showSkillUp = false
+    showFavorites = false
     
     if SPF.CraftSkillUpCheckbox then
-        SPF.CraftSkillUpCheckbox:SetChecked(showSkillUp)
+        SPF.CraftSkillUpCheckbox:SetChecked(false)
+    end
+    if SPF.CraftFavoritesCheckbox then
+        SPF.CraftFavoritesCheckbox:SetChecked(false)
     end
     
     if SPF.CraftSearchBox then

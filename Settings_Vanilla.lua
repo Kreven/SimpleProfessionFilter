@@ -1,4 +1,5 @@
 local addonName, SPF = ...
+local settingsCategory
 
 -- Default settings
 local DEFAULTS = {
@@ -17,7 +18,7 @@ function SPF:RegisterSettings()
     
     local categoryName = "|TInterface/Addons/SimpleProfessionFilter/Art/Icon:20:20:0:-7|t Simple Profession Filter"
     local category, layout = Settings.RegisterCanvasLayoutCategory(optionsFrame, categoryName)
-    category.ID = "SimpleProfessionFilter"
+    settingsCategory = category
     Settings.RegisterAddOnCategory(category)
     
     local layoutIndex = 0
@@ -89,6 +90,50 @@ function SPF:RegisterSettings()
         "rememberFilters"
     )
 
+    -- Support link
+    local supportFrame = CreateFrame("Frame", nil, optionsFrame)
+    supportFrame:SetSize(450, 48)
+    supportFrame.layoutIndex = GetLayoutIndex()
+    supportFrame.topPadding = 16
+    
+    local supportLabel = supportFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    supportLabel:SetPoint("TOPLEFT", 0, 0)
+    supportLabel:SetTextColor(0.6, 0.6, 0.6)
+    supportLabel:SetText("|TInterface\\MoneyFrame\\UI-GoldIcon:12:12:0:0|t If you find this addon helpful, consider buying me a cup of tea on Donatello :)")
+    
+    local supportBox = CreateFrame("EditBox", nil, supportFrame, "InputBoxTemplate")
+    supportBox:SetSize(220, 20)
+    supportBox:SetPoint("TOPLEFT", supportLabel, "BOTTOMLEFT", 6, -6)
+    supportBox:SetAutoFocus(false)
+    supportBox:SetFontObject(GameFontHighlightSmall)
+    supportBox:SetText("https://donatello.to/Krev")
+    supportBox:SetCursorPosition(0)
+    
+    supportBox:SetScript("OnEditFocusGained", function(self)
+        self:HighlightText()
+    end)
+    supportBox:SetScript("OnEditFocusLost", function(self)
+        self:HighlightText(0, 0)
+        self:SetText("https://donatello.to/Krev")
+    end)
+    supportBox:SetScript("OnEscapePressed", function(self)
+        self:ClearFocus()
+    end)
+    supportBox:SetScript("OnTextChanged", function(self, userInput)
+        if userInput then
+            self:SetText("https://donatello.to/Krev")
+            self:HighlightText()
+        end
+    end)
+    supportBox:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Click and press Ctrl+C to copy the link", 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    supportBox:SetScript("OnLeave", function(self)
+        GameTooltip:Hide()
+    end)
+
     optionsFrame:Layout()
 end
 
@@ -100,6 +145,8 @@ EventUtil.ContinueOnAddOnLoaded(addonName, function()
             SimpleProfessionFilterDB[k] = v
         end
     end
+    
+    SimpleProfessionFilterDB.favorites = SimpleProfessionFilterDB.favorites or {}
     
     -- Initialize state from DB if remembering
     SimpleProfessionFilterDB.TradeSkillState = SimpleProfessionFilterDB.TradeSkillState or {}
@@ -131,5 +178,7 @@ end)
 -- Slash command to open settings
 _G["SLASH_SIMPLEPROFESSIONFILTER1"] = "/spf"
 SlashCmdList["SIMPLEPROFESSIONFILTER"] = function()
-    Settings.OpenToCategory("SimpleProfessionFilter")
+    if settingsCategory then
+        Settings.OpenToCategory(settingsCategory:GetID())
+    end
 end

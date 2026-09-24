@@ -14,6 +14,7 @@ A minimalist profession filtering addon for World of Warcraft Classic Era that e
 - **Clear button** - Quickly clear your search with one click
 
 ### ✨ Advanced Filtering
+- **Favorites filter** - Mark your favorite recipes with a star icon and quickly filter the list with the "Fav" checkbox. Saved per profession.
 - **Skill up filter** - Show only recipes that will increase your skill
 - **Have materials filter** - Show only recipes you have materials for
 - **Enchanting Categories** - Dedicated slot-based filtering (Boots, Bracer, Weapon, etc.) with support for most official WoW languages.
@@ -45,14 +46,17 @@ A minimalist profession filtering addon for World of Warcraft Classic Era that e
 2. Use the search box to find recipes by name or material
 3. Toggle "Skill up" to show only recipes that increase your skill
 4. Toggle "Have mats" to show only craftable recipes
-5. Click the X button or press ESC to clear your search
-6. **Shift+Click** items in your bag or chat to instantly search for them
-7. Access settings via **Escape > Options > AddOns > Simple Profession Filter** or type `/spf`
+5. Toggle "Fav" to show only your favorite recipes
+6. Click the star icon in the recipe detail pane to add or remove it from favorites
+7. Click the X button or press ESC to clear your search
+8. **Shift+Click** items in your bag or chat to instantly search for them
+9. Access settings via **Escape > Options > AddOns > Simple Profession Filter** or type `/spf`
 
 ### Examples
 - Type `"copper"` to find all recipes using Copper Bar or Copper Ore
 - Type `"heavy"` to find Heavy Armor Kit, Heavy Leather, etc.
 - Enable "Skill up" + "Have mats" to see what you can craft for skill points
+- Enable "Fav" + "Have mats" to quickly see which of your favorite recipes you can craft
 
 ## Screenshots
 
